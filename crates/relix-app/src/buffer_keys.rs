@@ -23,6 +23,7 @@ pub fn apply_buffer_key(buffer: &mut TextBuffer, chord: KeyChord, tab_width: usi
     let ctrl = chord.modifiers.ctrl;
     let alt = chord.modifiers.alt;
     match chord.code {
+        KeyCode::Char('a') if ctrl => return moved(|| buffer.select_all()),
         KeyCode::Char(ch) if !ctrl && !alt => {
             buffer.insert_char(ch);
             return BufferKey::Typed(ch);

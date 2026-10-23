@@ -24,7 +24,6 @@ use relix_core::{
     ChangeReport, DataSourceId, ObjectKind, RowBatch, TableDetails, TableQuery, TableRef, Value,
 };
 use relix_driver_api::DriverError;
-use relix_editor::TextBuffer;
 use relix_editor::{CatalogTable, CompletionCatalog, CompletionItem, CompletionKind, complete};
 use relix_project::SplitDirection;
 use relix_query::RecentList;
@@ -305,12 +304,11 @@ impl App {
             |column| format!("Edit {}", column.meta.name),
         );
         self.overlays
-            .push(Overlay::TextEdit(Box::new(TextEditState {
+            .push(Overlay::TextEdit(Box::new(TextEditState::new(
                 title,
-                buffer: TextBuffer::from_text(&text),
-                scroll: 0,
-                action: TextEditAction::GridCell { tab, row, column },
-            })));
+                &text,
+                TextEditAction::GridCell { tab, row, column },
+            ))));
     }
 
     pub(crate) fn stage_cell_text(&mut self, tab: TabId, row: usize, column: usize, text: String) {

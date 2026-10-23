@@ -27,7 +27,6 @@ use relix_core::keyvalue::{
     ValueRange,
 };
 use relix_driver_api::DriverError;
-use relix_editor::TextBuffer;
 
 const KEY_PAGE: isize = 15;
 
@@ -712,12 +711,9 @@ impl App {
             _ => return,
         };
         self.overlays
-            .push(Overlay::TextEdit(Box::new(TextEditState {
-                title,
-                buffer: TextBuffer::from_text(&text),
-                scroll: 0,
-                action,
-            })));
+            .push(Overlay::TextEdit(Box::new(TextEditState::new(
+                title, &text, action,
+            ))));
     }
 
     pub(crate) fn save_text_edit(&mut self, action: TextEditAction, text: String) {

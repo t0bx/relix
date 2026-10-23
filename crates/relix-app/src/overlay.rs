@@ -225,6 +225,19 @@ pub struct TextEditState {
     pub action: TextEditAction,
 }
 
+impl TextEditState {
+    pub fn new(title: String, text: &str, action: TextEditAction) -> Self {
+        let mut buffer = TextBuffer::from_text(text);
+        buffer.move_document_end(false);
+        Self {
+            title,
+            buffer,
+            scroll: 0,
+            action,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SortEditorState {
     pub tab: TabId,
