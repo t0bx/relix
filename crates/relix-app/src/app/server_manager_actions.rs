@@ -36,7 +36,13 @@ impl App {
                         let active = sessions
                             .iter()
                             .filter(|session| session.endpoint == endpoint)
-                            .map(|session| session.status.label())
+                            .map(|session| {
+                                format!(
+                                    "{} · {} connection(s)",
+                                    session.status.label(),
+                                    session.references
+                                )
+                            })
                             .next();
                         ServerRow {
                             id,

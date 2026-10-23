@@ -40,8 +40,8 @@ Relix asks for approval before running `wg-quick up` with administrator rights.
 
 Create `Homelab SSH` once (global scope, `admin@192.168.178.10`, SSH key) and select it as
 SSH config in the PostgreSQL, MariaDB, Redis, MongoDB and ClickHouse data sources of the
-`Homelab` project. All five share one SSH session (`t` in the server manager shows one active
-session with five users). Closing one data source keeps the session for the others; it closes
+`Homelab` project. All five share one SSH session (the server manager shows it as
+`connected · 5 connection(s)`). Closing one data source keeps the session for the others; it closes
 with the last one. Changing the key path in `Homelab SSH` applies to all five on their next
 connect.
 
