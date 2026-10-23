@@ -55,7 +55,19 @@ pub fn wrap_query(statement: &str, dialect: Dialect, view: &ResultView<'_>) -> O
 }
 
 pub fn is_wrappable(statement: &str, dialect: Dialect) -> bool {
-    if classify(statement, dialect).kind != StatementKind::Query {
+    let derived_tables_with_limit = matches!(
+        dialect,
+        Dialect::Postgres
+            | Dialect::MySql
+            | Dialect::Sqlite
+            | Dialect::Generic
+            | Dialect::ClickHouse
+            | Dialect::DuckDb
+            | Dialect::Snowflake
+            | Dialect::BigQuery
+            | Dialect::InfluxSql
+    );
+    if !derived_tables_with_limit || classify(statement, dialect).kind != StatementKind::Query {
         return false;
     }
     let tokens = tokenize(statement, dialect);

@@ -4,7 +4,7 @@
  */
 
 use relix_core::StatementOutcome;
-use relix_driver_api::{DatabaseConnection, DriverError, ErrorKind, ExecuteOptions, SqlConnection};
+use relix_driver_api::{DatabaseConnection, DriverError, ErrorKind, ExecuteOptions, QueryExecutor};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
@@ -46,12 +46,12 @@ pub async fn run_script<F>(
 where
     F: FnMut(StatementReport),
 {
-    let Some(sql) = connection.as_sql() else {
+    let Some(executor) = connection.as_query() else {
         on_report(StatementReport {
             index: 0,
             statement: request.statements.first().cloned().unwrap_or_default(),
             result: Err(DriverError::unsupported(
-                "this data source does not execute SQL",
+                "this data source has no query console",
             )),
             elapsed: Duration::ZERO,
         });
@@ -62,7 +62,7 @@ where
             return ScriptOutcome::Cancelled { index };
         }
         let started = Instant::now();
-        let result = execute_one(sql, statement, &request, &cancel).await;
+        let result = execute_one(executor, statement, &request, &cancel).await;
         let failed = result.as_ref().err().map(|error| error.kind);
         on_report(StatementReport {
             index,
@@ -80,7 +80,7 @@ where
 }
 
 async fn execute_one(
-    sql: &dyn SqlConnection,
+    sql: &dyn QueryExecutor,
     statement: &str,
     request: &ScriptRequest,
     cancel: &CancellationToken,

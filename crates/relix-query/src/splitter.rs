@@ -20,6 +20,9 @@ pub struct StatementSpan {
 /// `BEGIN`/`CASE` … `END` nesting, and MySQL `DELIMITER` directives are honoured.
 /// Spans exclude the delimiter and surrounding whitespace; empty statements are dropped.
 pub fn split_statements(source: &str, dialect: Dialect) -> Vec<StatementSpan> {
+    if !dialect.is_sql_like() {
+        return crate::request_splitter::split_requests(source, dialect);
+    }
     let tokens = tokenize(source, dialect);
     let mut splitter = Splitter::new(source, dialect);
     let mut index = 0;

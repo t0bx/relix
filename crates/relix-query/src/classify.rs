@@ -31,6 +31,9 @@ pub struct StatementTraits {
 /// that should trigger a confirmation on protected connections: `DROP`, `TRUNCATE`,
 /// `ALTER … DROP`, and `UPDATE`/`DELETE` without a `WHERE` clause.
 pub fn classify(statement: &str, dialect: Dialect) -> StatementTraits {
+    if let Some(traits) = crate::native_classify::classify_native(statement, dialect) {
+        return traits;
+    }
     let tokens = tokenize(statement, dialect);
     let words: Vec<Token<'_>> = significant(&tokens).collect();
     let first = leading_keyword(&words);
