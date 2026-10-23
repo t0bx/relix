@@ -1,0 +1,24 @@
+[package]
+name = "relix-driver-oracle"
+description = "Oracle Database driver for the RELIX database IDE (ODPI-C, needs Oracle Instant Client at runtime)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+relix-core.workspace = true
+relix-driver-api.workspace = true
+relix-query = { path = "../relix-query" }
+async-trait.workspace = true
+tokio.workspace = true
+oracle = "0.6.3"
+
+[dev-dependencies]
+relix-testing = { path = "../relix-testing" }
+tokio.workspace = true
+
+[lints]
+workspace = true
