@@ -3,7 +3,7 @@
  * @since 23.10.2026
  */
 
-use crate::catalog_rows::text_at;
+use crate::catalog_rows::{number_at, text_at};
 use crate::connection::MySqlConnection;
 use crate::errors::map_error;
 use crate::flavor::Flavor;
@@ -14,7 +14,9 @@ use relix_core::ConnectionConfig;
 use relix_driver_api::{DriverError, ErrorKind, with_timeout};
 use tokio::sync::Mutex;
 
-pub const DEFAULT_PORT: u16 = 3306;
+/// `CONNECTION_ID()` is used for `KILL QUERY` because TiDB's 64-bit global connection ids
+/// do not fit the 32-bit id of the protocol handshake.
+const SESSION_IDENTITY_SQL: &str = "SELECT VERSION(), CONNECTION_ID()";
 const POOL_MIN_CONNECTIONS: usize = 1;
 const POOL_MAX_CONNECTIONS: usize = 4;
 
@@ -31,7 +33,7 @@ async fn establish(
     flavor: Flavor,
     config: &ConnectionConfig,
 ) -> Result<MySqlConnection, DriverError> {
-    let base = base_options(config);
+    let base = base_options(flavor, config);
     let mut last_error = None;
     for ssl in tls_attempts(&config.settings.tls, config.tls_server_name.as_deref()).await? {
         let opts: Opts = base.clone().ssl_opts(ssl).into();
@@ -56,11 +58,17 @@ async fn finish(
     mut session: Conn,
 ) -> Result<MySqlConnection, DriverError> {
     let row: Option<Row> = session
-        .query_first("SELECT VERSION()")
+        .query_first(SESSION_IDENTITY_SQL)
         .await
         .map_err(map_error)?;
-    let version = row.and_then(|row| text_at(&row, 0)).unwrap_or_default();
-    let session_id = session.id();
+    let version = row
+        .as_ref()
+        .and_then(|row| text_at(row, 0))
+        .unwrap_or_default();
+    let session_id = row
+        .as_ref()
+        .and_then(|row| number_at(row, 1))
+        .unwrap_or_else(|| u64::from(session.id()));
     Ok(MySqlConnection {
         server_flavor: Flavor::detect(&version),
         server_info: flavor.server_info(&version),
@@ -71,7 +79,7 @@ async fn finish(
     })
 }
 
-fn base_options(config: &ConnectionConfig) -> OptsBuilder {
+fn base_options(flavor: Flavor, config: &ConnectionConfig) -> OptsBuilder {
     let settings = &config.settings;
     let pool_opts = PoolOpts::default();
     let pool_opts = PoolConstraints::new(POOL_MIN_CONNECTIONS, POOL_MAX_CONNECTIONS)
@@ -80,7 +88,7 @@ fn base_options(config: &ConnectionConfig) -> OptsBuilder {
         });
     OptsBuilder::default()
         .ip_or_hostname(config.host_or_default())
-        .tcp_port(settings.port.unwrap_or(DEFAULT_PORT))
+        .tcp_port(settings.port.unwrap_or(flavor.default_port()))
         .user(settings.username.clone().filter(|user| !user.is_empty()))
         .pass(
             config
@@ -122,14 +130,21 @@ mod tests {
             ..ConnectionSettings::default()
         };
         let config = ConnectionConfig::new(settings, Some(Secret::new("pw")));
-        let opts: Opts = base_options(&config).into();
+        let opts: Opts = base_options(Flavor::MySql, &config).into();
         assert_eq!(opts.ip_or_hostname(), "localhost");
-        assert_eq!(opts.tcp_port(), DEFAULT_PORT);
+        assert_eq!(opts.tcp_port(), 3306);
         assert_eq!(opts.user(), Some("relix"));
         assert_eq!(opts.db_name(), None);
         assert!(opts.client_found_rows());
         assert!(!opts.prefer_socket());
         assert_eq!(opts.pool_opts().constraints().max(), POOL_MAX_CONNECTIONS);
+    }
+
+    #[test]
+    fn tidb_defaults_to_its_own_port() {
+        let config = ConnectionConfig::new(ConnectionSettings::default(), None);
+        let opts: Opts = base_options(Flavor::TiDb, &config).into();
+        assert_eq!(opts.tcp_port(), 4000);
     }
 
     #[test]

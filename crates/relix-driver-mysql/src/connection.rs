@@ -19,7 +19,7 @@ pub struct MySqlConnection {
     pub(crate) server_flavor: Flavor,
     pub(crate) server_info: ServerInfo,
     pub(crate) session: Mutex<Option<Conn>>,
-    pub(crate) session_id: u32,
+    pub(crate) session_id: u64,
     pub(crate) pool: Pool,
     pub(crate) default_database: Option<String>,
 }

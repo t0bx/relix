@@ -3,7 +3,7 @@
  * @since 23.10.2026
  */
 
-use crate::connect::{DEFAULT_PORT, connect};
+use crate::connect::connect;
 use crate::flavor::Flavor;
 use async_trait::async_trait;
 use relix_core::{ConnectionConfig, Dialect};
@@ -30,7 +30,7 @@ macro_rules! flavored_driver {
             }
 
             fn capabilities(&self) -> DriverCapabilities {
-                driver_capabilities()
+                driver_capabilities($flavor)
             }
 
             async fn connect(
@@ -45,6 +45,7 @@ macro_rules! flavored_driver {
 
 flavored_driver!(MySqlDriver, Flavor::MySql);
 flavored_driver!(MariaDbDriver, Flavor::MariaDb);
+flavored_driver!(TiDbDriver, Flavor::TiDb);
 
 fn driver_metadata(flavor: Flavor) -> DriverMetadata {
     DriverMetadata::built_in(
@@ -52,19 +53,19 @@ fn driver_metadata(flavor: Flavor) -> DriverMetadata {
         flavor.product_name(),
         Some(Dialect::MySql),
         ConnectionTarget::Network {
-            default_port: DEFAULT_PORT,
+            default_port: flavor.default_port(),
         },
     )
 }
 
-fn driver_capabilities() -> DriverCapabilities {
+fn driver_capabilities(flavor: Flavor) -> DriverCapabilities {
     DriverCapabilities {
         multiple_databases: true,
         schemas: false,
         transactions: true,
         cancellation: true,
         table_editing: true,
-        routines: true,
+        routines: flavor.supports_routines(),
         tls: true,
         ..DriverCapabilities::relational()
     }
@@ -85,6 +86,11 @@ mod tests {
         assert_eq!(mariadb.display_name, "MariaDB");
         assert_eq!(mariadb.dialect, Some(Dialect::MySql));
         assert_eq!(mariadb.default_port(), Some(3306));
+        let tidb = TiDbDriver::new().metadata();
+        assert_eq!(tidb.id.as_str(), DriverId::TIDB);
+        assert_eq!(tidb.display_name, "TiDB");
+        assert_eq!(tidb.dialect, Some(Dialect::MySql));
+        assert_eq!(tidb.default_port(), Some(4000));
     }
 
     #[test]
@@ -93,5 +99,7 @@ mod tests {
         assert!(capabilities.is_relational());
         assert!(capabilities.multiple_databases && !capabilities.schemas);
         assert!(capabilities.cancellation && capabilities.routines && capabilities.tls);
+        let tidb = TiDbDriver::new().capabilities();
+        assert!(tidb.cancellation && tidb.tls && !tidb.routines);
     }
 }

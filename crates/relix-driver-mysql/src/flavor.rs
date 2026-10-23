@@ -10,13 +10,17 @@ use relix_driver_api::ServerInfo;
 pub enum Flavor {
     MySql,
     MariaDb,
+    TiDb,
 }
+
+const TIDB_MARKER: &str = "-TiDB-";
 
 impl Flavor {
     pub fn driver_id(self) -> &'static str {
         match self {
             Self::MySql => DriverId::MYSQL,
             Self::MariaDb => DriverId::MARIADB,
+            Self::TiDb => DriverId::TIDB,
         }
     }
 
@@ -24,14 +28,40 @@ impl Flavor {
         match self {
             Self::MySql => "MySQL",
             Self::MariaDb => "MariaDB",
+            Self::TiDb => "TiDB",
         }
     }
 
+    pub fn default_port(self) -> u16 {
+        match self {
+            Self::MySql | Self::MariaDb => 3306,
+            Self::TiDb => 4000,
+        }
+    }
+
+    /// TiDB parses `CREATE PROCEDURE`/`FUNCTION` but does not support stored routines.
+    pub fn supports_routines(self) -> bool {
+        self != Self::TiDb
+    }
+
     pub fn detect(version: &str) -> Self {
-        if version.to_ascii_lowercase().contains("mariadb") {
+        let lowercase = version.to_ascii_lowercase();
+        if lowercase.contains("tidb") {
+            Self::TiDb
+        } else if lowercase.contains("mariadb") {
             Self::MariaDb
         } else {
             Self::MySql
+        }
+    }
+
+    /// TiDB reports `<mysql-level>-TiDB-<release>`; its own release comes first.
+    fn release_version(self, version: &str) -> String {
+        match (self, version.split_once(TIDB_MARKER)) {
+            (Self::TiDb, Some((mysql, release))) => {
+                format!("{release} (MySQL {mysql} compatible)")
+            }
+            _ => version.to_owned(),
         }
     }
 
@@ -48,7 +78,7 @@ impl Flavor {
         };
         ServerInfo {
             product,
-            version: version.to_owned(),
+            version: server.release_version(version),
         }
     }
 }
@@ -62,6 +92,20 @@ mod tests {
         assert_eq!(Flavor::detect("8.4.3"), Flavor::MySql);
         assert_eq!(Flavor::detect("11.4.2-MariaDB-ubu2404"), Flavor::MariaDb);
         assert_eq!(Flavor::detect("5.5.5-10.11.6-mariadb-log"), Flavor::MariaDb);
+        assert_eq!(Flavor::detect("8.0.11-TiDB-v8.5.3"), Flavor::TiDb);
+    }
+
+    #[test]
+    fn tidb_reports_its_release_first() {
+        let info = Flavor::TiDb.server_info("8.0.11-TiDB-v8.5.3");
+        assert_eq!(info.product, "TiDB");
+        assert_eq!(info.version, "v8.5.3 (MySQL 8.0.11 compatible)");
+        assert_eq!(
+            Flavor::MySql.server_info("8.0.11-TiDB-v8.5.3").product,
+            "TiDB (connected via MySQL driver)"
+        );
+        assert_eq!(Flavor::TiDb.default_port(), 4000);
+        assert!(!Flavor::TiDb.supports_routines());
     }
 
     #[test]

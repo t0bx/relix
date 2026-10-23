@@ -104,11 +104,7 @@ fn map_driver_error(error: &MySqlDriverError) -> DriverError {
 }
 
 fn syntax_error_position(statement: &str, message: &str) -> Option<usize> {
-    let start = message.find("near '")? + "near '".len();
-    let rest = &message[start..];
-    let end = rest.rfind("' at line ")?;
-    let fragment = &rest[..end];
-    let line: usize = rest[end + "' at line ".len()..].trim().parse().ok()?;
+    let (fragment, line) = mysql_near_fragment(message).or_else(|| tidb_near_fragment(message))?;
     let line_start = if line <= 1 {
         0
     } else {
@@ -123,6 +119,29 @@ fn syntax_error_position(statement: &str, message: &str) -> Option<usize> {
         line_start + statement[line_start..].find(fragment)?
     };
     Some(statement[..byte_offset].chars().count())
+}
+
+/// MySQL and MariaDB end syntax errors with `near 'FROMM t' at line 1`.
+fn mysql_near_fragment(message: &str) -> Option<(&str, usize)> {
+    let start = message.find("near '")? + "near '".len();
+    let rest = &message[start..];
+    let end = rest.rfind("' at line ")?;
+    let line = rest[end + "' at line ".len()..].trim().parse().ok()?;
+    Some((&rest[..end], line))
+}
+
+/// TiDB ends syntax errors with `line 1 column 14 near "FROMM t" `.
+fn tidb_near_fragment(message: &str) -> Option<(&str, usize)> {
+    let near = message.rfind(" near \"")?;
+    let fragment_start = near + " near \"".len();
+    let fragment_end = message.rfind('"').filter(|end| *end >= fragment_start)?;
+    let line_start = message[..near].rfind("line ")? + "line ".len();
+    let line = message[line_start..near]
+        .split_whitespace()
+        .next()?
+        .parse()
+        .ok()?;
+    Some((&message[fragment_start..fragment_end], line))
 }
 
 #[cfg(test)]
@@ -193,6 +212,20 @@ mod tests {
         let message = "... the right syntax to use near 'x' at line 3";
         assert_eq!(syntax_error_position(statement, message), Some(24));
         let end = "... the right syntax to use near '' at line 1";
+        assert_eq!(syntax_error_position("SELECT ", end), Some(6));
+    }
+
+    #[test]
+    fn tidb_syntax_errors_are_located() {
+        let message = "You have an error in your SQL syntax; check the manual that corresponds \
+                       to your TiDB version for the right syntax to use line 1 column 14 near \"FROMM t\" ";
+        assert_eq!(syntax_error_position("SELECT * FROMM t", message), Some(9));
+        let second_line = "... to use line 2 column 10 near \"t\" ";
+        assert_eq!(
+            syntax_error_position("SELECT 1,\n2 FROMM t", second_line),
+            Some(18)
+        );
+        let end = "... to use line 1 column 7 near \"\" ";
         assert_eq!(syntax_error_position("SELECT ", end), Some(6));
     }
 }

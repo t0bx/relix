@@ -145,7 +145,7 @@ fn column_info(row: &Row, flavor: Flavor, primary_key: &[String]) -> Option<Colu
 fn normalize_default(flavor: Flavor, default: Option<String>) -> Option<String> {
     match flavor {
         Flavor::MariaDb => default.filter(|value| value != "NULL"),
-        Flavor::MySql => default,
+        Flavor::MySql | Flavor::TiDb => default,
     }
 }
 

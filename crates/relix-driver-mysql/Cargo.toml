@@ -1,6 +1,6 @@
 [package]
 name = "relix-driver-mysql"
-description = "MySQL and MariaDB driver for the RELIX database IDE"
+description = "MySQL, MariaDB and TiDB driver for the RELIX database IDE"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

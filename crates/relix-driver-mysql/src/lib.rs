@@ -3,6 +3,7 @@
  * @since 23.10.2026
  */
 
+mod auto_random;
 mod catalog;
 mod catalog_rows;
 mod changes;
@@ -23,5 +24,5 @@ mod tls;
 mod values;
 
 pub use connection::MySqlConnection;
-pub use driver::{MariaDbDriver, MySqlDriver};
+pub use driver::{MariaDbDriver, MySqlDriver, TiDbDriver};
 pub use flavor::Flavor;

@@ -3,9 +3,11 @@
  * @since 23.10.2026
  */
 
+use crate::auto_random::mark_auto_random;
 use crate::catalog::{list_databases, list_objects};
 use crate::connection::MySqlConnection;
 use crate::definitions::show_create;
+use crate::flavor::Flavor;
 use crate::table_structure::{columns, foreign_keys, indexes, primary_key, relation_kind_of};
 use async_trait::async_trait;
 use relix_core::{DatabaseInfo, ObjectInfo, TableDetails, TableRef};
@@ -45,9 +47,14 @@ impl SqlIntrospector for MySqlConnection {
         let kind = relation_kind_of(&mut conn, &table).await?;
         let indexes = indexes(&mut conn, &table).await?;
         let primary_key = primary_key(&indexes);
-        let columns = columns(&mut conn, &table, self.server_flavor, &primary_key).await?;
+        let mut columns = columns(&mut conn, &table, self.server_flavor, &primary_key).await?;
         let foreign_keys = foreign_keys(&mut conn, &table).await?;
         let definition = tolerate_query_error(show_create(&mut conn, kind, &table).await)?;
+        if self.server_flavor == Flavor::TiDb
+            && let Some(definition) = &definition
+        {
+            mark_auto_random(&mut columns, definition);
+        }
         Ok(TableDetails {
             table,
             kind,
