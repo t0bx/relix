@@ -6,7 +6,7 @@
 use crate::errors::{map_status_error, map_transport_error};
 use relix_core::{ConnectionConfig, Secret, TlsMode};
 use relix_driver_api::{DriverError, ErrorKind};
-use reqwest::{Client, Method, RequestBuilder, Response, Url};
+use reqwest::{Client, ClientBuilder, Method, RequestBuilder, Response, Url};
 use serde::de::DeserializeOwned;
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
@@ -119,24 +119,14 @@ impl HttpEndpoint {
         relix_tls::install_default_provider();
         let host = config.tls_host().to_owned();
         let port = config.settings.port.unwrap_or(options.default_port);
-        let mut builder = Client::builder()
-            .connect_timeout(config.settings.connect_timeout())
-            .user_agent(concat!("relix/", env!("CARGO_PKG_VERSION")));
-        if let Some(timeout) = options.request_timeout {
-            builder = builder.timeout(timeout);
-        }
+        let mut builder = client_builder(config, options.request_timeout);
         if scheme == "https" {
             let tls = relix_tls::client_config(&config.settings.tls)
                 .await?
                 .ok_or_else(|| DriverError::internal("TLS is disabled for this data source"))?;
             builder = builder.tls_backend_preconfigured(tls);
         }
-        if config.tls_server_name.is_some()
-            && let Ok(ip) = config.host_or_default().parse::<IpAddr>()
-        {
-            builder = builder.resolve(&host, SocketAddr::new(ip, 0));
-        }
-        let client = builder
+        let client = pin_tunneled_host(builder, config, &host)
             .build()
             .map_err(|error| DriverError::configuration(error.to_string()))?;
         let host_part = if host.contains(':') {
@@ -160,6 +150,10 @@ impl HttpEndpoint {
         })
     }
 
+    pub(crate) fn from_parts(client: Client, base: Url, auth: HttpAuth) -> Self {
+        Self { client, base, auth }
+    }
+
     pub fn base_url(&self) -> &Url {
         &self.base
     }
@@ -175,7 +169,11 @@ impl HttpEndpoint {
     }
 
     pub fn request(&self, method: Method, path: &str) -> RequestBuilder {
-        self.auth.apply(self.client.request(method, self.url(path)))
+        self.request_url(method, self.url(path))
+    }
+
+    pub fn request_url(&self, method: Method, url: Url) -> RequestBuilder {
+        self.auth.apply(self.client.request(method, url))
     }
 
     pub fn with_auth(&self, auth: HttpAuth) -> Self {
@@ -216,4 +214,32 @@ impl HttpEndpoint {
             .await
             .map_err(|error| map_transport_error(&error))
     }
+}
+
+pub(crate) fn client_builder(
+    config: &ConnectionConfig,
+    request_timeout: Option<Duration>,
+) -> ClientBuilder {
+    let builder = Client::builder()
+        .connect_timeout(config.settings.connect_timeout())
+        .user_agent(concat!("relix/", env!("CARGO_PKG_VERSION")));
+    match request_timeout {
+        Some(timeout) => builder.timeout(timeout),
+        None => builder,
+    }
+}
+
+/// Behind an SSH tunnel the configured host is the forwarded loopback address while URLs
+/// keep the original host name, so DNS for that name is pinned to the forwarded address.
+pub(crate) fn pin_tunneled_host(
+    builder: ClientBuilder,
+    config: &ConnectionConfig,
+    host: &str,
+) -> ClientBuilder {
+    if config.tls_server_name.is_some()
+        && let Ok(ip) = config.host_or_default().parse::<IpAddr>()
+    {
+        return builder.resolve(host, SocketAddr::new(ip, 0));
+    }
+    builder
 }

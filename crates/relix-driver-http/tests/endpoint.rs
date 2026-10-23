@@ -7,7 +7,7 @@
 
 use relix_core::{ConnectionConfig, ConnectionSettings, Secret, TlsMode, TlsSettings};
 use relix_driver_api::ErrorKind;
-use relix_driver_http::{EndpointOptions, HttpAuth, HttpEndpoint, Method};
+use relix_driver_http::{EndpointOptions, HttpAuth, HttpEndpoint, Method, Url};
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -132,4 +132,57 @@ async fn forwarded_endpoints_keep_the_original_host_name() {
     assert_eq!(endpoint.base_url().host_str(), Some("search.internal"));
     let request = requests.lock().unwrap()[0].to_lowercase();
     assert!(request.contains(&format!("host: search.internal:{port}")));
+}
+
+#[tokio::test]
+async fn fixed_base_urls_accept_plain_http_only_with_tls_disabled() {
+    let (port, requests) = serve("404 Not Found", r#"{"error":"missing"}"#).await;
+    let base = Url::parse(&format!("http://127.0.0.1:{port}/api")).unwrap();
+    let refused = HttpEndpoint::at_base_url(
+        &config(port, TlsMode::Prefer),
+        base.clone(),
+        HttpAuth::None,
+        None,
+    )
+    .await
+    .err()
+    .unwrap();
+    assert_eq!(refused.kind, ErrorKind::Configuration);
+    let endpoint = HttpEndpoint::at_base_url(
+        &config(port, TlsMode::Disable),
+        base,
+        HttpAuth::Bearer(Secret::new("token")),
+        None,
+    )
+    .await
+    .unwrap();
+    let url = endpoint.segments_url(&["datasets", "my table/1"]);
+    assert_eq!(url.path(), "/api/datasets/my%20table%2F1");
+    let response = endpoint
+        .exchange(endpoint.request_url(Method::GET, url))
+        .await
+        .unwrap();
+    assert_eq!(response.status.as_u16(), 404);
+    assert_eq!(response.body, r#"{"error":"missing"}"#);
+    let request = requests.lock().unwrap()[0].to_lowercase();
+    assert!(request.starts_with("get /api/datasets/my%20table%2f1"));
+    assert!(request.contains("authorization: bearer token"));
+}
+
+#[tokio::test]
+async fn fixed_base_urls_follow_ssh_tunnels() {
+    let (port, requests) = serve("200 OK", "{}").await;
+    let mut original = config(443, TlsMode::Disable);
+    original.settings.host = Some("acme.example.com".into());
+    let tunneled = original.redirected("127.0.0.1", port);
+    let base = Url::parse(&format!("http://acme.example.com:{port}/")).unwrap();
+    let endpoint = HttpEndpoint::at_base_url(&tunneled, base, HttpAuth::None, None)
+        .await
+        .unwrap();
+    endpoint
+        .send(endpoint.request(Method::POST, "/api/v2/statements"))
+        .await
+        .unwrap();
+    let request = requests.lock().unwrap()[0].to_lowercase();
+    assert!(request.contains(&format!("host: acme.example.com:{port}")));
 }
