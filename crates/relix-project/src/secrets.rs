@@ -4,7 +4,7 @@
  */
 
 use crate::error::ProjectError;
-use relix_core::{DataSourceId, ProjectId, Secret};
+use relix_core::{ConfigScope, DataSourceId, ProjectId, Secret, ServerConfigId};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -19,8 +19,37 @@ impl SecretKey {
         Self(format!("project/{project}/datasource/{data_source}"))
     }
 
+    pub fn for_server(
+        scope: ConfigScope,
+        project: Option<ProjectId>,
+        server: ServerConfigId,
+        kind: ServerSecret,
+    ) -> Option<Self> {
+        let prefix = match (scope, project) {
+            (ConfigScope::Global, _) => "global".to_owned(),
+            (ConfigScope::Project, Some(project)) => format!("project/{project}"),
+            (ConfigScope::Project, None) => return None,
+        };
+        Some(Self(format!("{prefix}/server/{server}/{}", kind.suffix())))
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ServerSecret {
+    Password,
+    Passphrase,
+}
+
+impl ServerSecret {
+    fn suffix(self) -> &'static str {
+        match self {
+            Self::Password => "password",
+            Self::Passphrase => "passphrase",
+        }
     }
 }
 
@@ -199,6 +228,35 @@ mod tests {
 
     fn key() -> SecretKey {
         SecretKey::for_data_source(ProjectId::new(), DataSourceId::new())
+    }
+
+    #[test]
+    fn server_secret_keys_are_scoped() {
+        let server = ServerConfigId::new();
+        let project = ProjectId::new();
+        let global = SecretKey::for_server(
+            ConfigScope::Global,
+            Some(project),
+            server,
+            ServerSecret::Password,
+        )
+        .unwrap();
+        assert_eq!(global.as_str(), format!("global/server/{server}/password"));
+        let local = SecretKey::for_server(
+            ConfigScope::Project,
+            Some(project),
+            server,
+            ServerSecret::Passphrase,
+        )
+        .unwrap();
+        assert_eq!(
+            local.as_str(),
+            format!("project/{project}/server/{server}/passphrase")
+        );
+        assert!(
+            SecretKey::for_server(ConfigScope::Project, None, server, ServerSecret::Password)
+                .is_none()
+        );
     }
 
     #[test]
