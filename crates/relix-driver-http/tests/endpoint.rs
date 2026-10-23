@@ -170,6 +170,21 @@ async fn fixed_base_urls_accept_plain_http_only_with_tls_disabled() {
 }
 
 #[tokio::test]
+async fn empty_posts_announce_their_length() {
+    let (port, requests) = serve("200 OK", "{}").await;
+    let base = Url::parse(&format!("http://127.0.0.1:{port}/")).unwrap();
+    let config = config(port, TlsMode::Disable);
+    let endpoint = HttpEndpoint::at_base_url(&config, base, HttpAuth::None, None)
+        .await
+        .unwrap();
+    let url = endpoint.segments_url(&["jobs", "j1", "cancel"]);
+    endpoint.exchange(endpoint.empty_post(url)).await.unwrap();
+    let request = requests.lock().unwrap()[0].to_lowercase();
+    assert!(request.starts_with("post /jobs/j1/cancel"));
+    assert_eq!(request.matches("content-length: 0").count(), 1);
+}
+
+#[tokio::test]
 async fn fixed_base_urls_follow_ssh_tunnels() {
     let (port, requests) = serve("200 OK", "{}").await;
     let mut original = config(443, TlsMode::Disable);

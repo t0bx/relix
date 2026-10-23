@@ -7,7 +7,8 @@ use crate::endpoint::{HttpAuth, HttpEndpoint, client_builder, pin_tunneled_host}
 use crate::errors::map_transport_error;
 use relix_core::{ConnectionConfig, TlsMode, TlsSettings};
 use relix_driver_api::DriverError;
-use reqwest::{RequestBuilder, StatusCode, Url};
+use reqwest::header::CONTENT_LENGTH;
+use reqwest::{Method, RequestBuilder, StatusCode, Url};
 use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,6 +69,13 @@ impl HttpEndpoint {
             path.pop_if_empty().extend(segments);
         }
         url
+    }
+
+    /// A `POST` without payload. HTTP clients omit the length of an empty body, which
+    /// Google front ends reject with `411 Length Required`, so it is sent explicitly.
+    pub fn empty_post(&self, url: Url) -> RequestBuilder {
+        self.request_url(Method::POST, url)
+            .header(CONTENT_LENGTH, "0")
     }
 
     /// Sends the request and returns status and body for every HTTP status, leaving the
