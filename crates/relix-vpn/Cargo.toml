@@ -1,0 +1,25 @@
+[package]
+name = "relix-vpn"
+description = "VPN detection, managed WireGuard/OpenVPN profiles and reachability diagnostics for RELIX"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+relix-core.workspace = true
+async-trait.workspace = true
+if-addrs = "0.15.0"
+ipnet = "2.12.2"
+thiserror.workspace = true
+tokio = { workspace = true, features = ["net", "process"] }
+tracing = "0.1.44"
+
+[dev-dependencies]
+tempfile = "3.27.0"
+tokio.workspace = true
+
+[lints]
+workspace = true
