@@ -24,6 +24,12 @@ tokio-util = "0.7.20"
 tracing = "0.1.44"
 uuid.workspace = true
 
+relix-driver-sqlite = { path = "../relix-driver-sqlite", optional = true }
+relix-testing = { workspace = true, optional = true }
+
+[features]
+test-support = ["dep:relix-driver-sqlite", "dep:relix-testing"]
+
 [dev-dependencies]
 pretty_assertions.workspace = true
 relix-driver-sqlite = { path = "../relix-driver-sqlite" }

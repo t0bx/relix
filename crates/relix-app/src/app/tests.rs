@@ -3,118 +3,24 @@
  * @since 23.10.2026
  */
 
-use super::{App, AppContext, ConnectionStatus, EVENT_QUEUE_CAPACITY, Focus};
+use super::{ConnectionStatus, Focus};
 use crate::command::Command;
 use crate::editor_tab::ResultKind;
-use crate::events::{AppEvent, InputEvent};
 use crate::explorer::NodeKind;
 use crate::grid::GridView;
 use crate::keyvalue_tab::ValueContent;
 use crate::overlay::Overlay;
-use crate::services::{MemoryClipboard, StaticDriverService};
 use crate::tab::Tab;
-use relix_config::{AppPaths, GlobalSettings, KeyChord, KeyCode, Modifiers, ThemeCatalog};
+use crate::test_support::AppHarness as Harness;
+use relix_config::{KeyChord, KeyCode, Modifiers};
 use relix_core::{DataSourceDefinition, DriverId, Environment, Value};
-use relix_driver_sqlite::SqliteDriver;
-use relix_project::{MemorySecretStore, ProjectStore};
 use relix_testing::mock_key_value::{MockKeyValueDriver, MockValue};
-use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::mpsc;
-
-struct Harness {
-    app: App,
-    events: mpsc::Receiver<AppEvent>,
-}
-
-impl Harness {
-    fn new(root: &Path, kv: MockKeyValueDriver) -> Self {
-        let paths = AppPaths::rooted(root);
-        paths.ensure().expect("paths");
-        let (sender, events) = mpsc::channel(EVENT_QUEUE_CAPACITY);
-        let context = AppContext {
-            store: ProjectStore::new(paths.projects_dir()),
-            paths,
-            secrets: Arc::new(MemorySecretStore::default()),
-            drivers: Arc::new(StaticDriverService::new(vec![
-                Arc::new(SqliteDriver),
-                Arc::new(kv),
-            ])),
-            clipboard: Box::new(MemoryClipboard::default()),
-            runtime: tokio::runtime::Handle::current(),
-            events: sender,
-        };
-        let app = App::new(
-            context,
-            GlobalSettings::default(),
-            ThemeCatalog::built_in(),
-            Vec::new(),
-        );
-        Self { app, events }
-    }
-
-    async fn settle(&mut self) {
-        while let Ok(Some(event)) =
-            tokio::time::timeout(Duration::from_millis(400), self.events.recv()).await
-        {
-            self.app.handle_event(event);
-        }
-    }
-
-    fn key(&mut self, chord: KeyChord) {
-        self.app.handle_input(InputEvent::Key(chord));
-    }
-
-    fn keys(&mut self, spec: &str) {
-        for part in spec.split_whitespace() {
-            self.key(part.parse().expect("key"));
-        }
-    }
-
-    fn type_text(&mut self, text: &str) {
-        for ch in text.chars() {
-            let chord = match ch {
-                '\n' => KeyChord::plain(KeyCode::Enter),
-                ch => KeyChord::char(ch),
-            };
-            self.key(chord);
-        }
-    }
-
-    fn add_sqlite(
-        &mut self,
-        name: &str,
-        file: &Path,
-        environment: Environment,
-    ) -> relix_core::DataSourceId {
-        let mut definition = DataSourceDefinition::new(name, DriverId::from("sqlite"));
-        definition.settings.file_path = Some(file.to_path_buf());
-        definition.settings.create_if_missing = true;
-        definition.environment = environment;
-        let id = definition.id;
-        self.app.save_data_source(definition, None);
-        id
-    }
-
-    fn active_editor(&mut self) -> &mut crate::editor_tab::EditorTab {
-        match self.app.active_tab_mut() {
-            Some(Tab::Editor(editor)) => editor,
-            _ => panic!("expected an editor tab"),
-        }
-    }
-}
-
-async fn run_sql(harness: &mut Harness, source: relix_core::DataSourceId, sql: &str) {
-    harness.app.new_editor_tab(Some(source), sql);
-    harness.key(KeyChord::plain(KeyCode::F(9)));
-    harness.settle().await;
-}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn startup_creates_development_project_and_restores_session() {
     let dir = tempfile::tempdir().unwrap();
-    let mut harness = Harness::new(dir.path(), MockKeyValueDriver::default());
+    let mut harness = Harness::new(dir.path(), vec![Arc::new(MockKeyValueDriver::default())]);
     harness.app.startup(Some("Development"));
     assert_eq!(harness.app.project_name(), Some("Development"));
     harness.keys("ctrl+n");
@@ -123,7 +29,7 @@ async fn startup_creates_development_project_and_restores_session() {
     assert_eq!(harness.app.workspace.pane_order().len(), 2);
     harness.app.save_session().unwrap();
 
-    let mut restored = Harness::new(dir.path(), MockKeyValueDriver::default());
+    let mut restored = Harness::new(dir.path(), vec![Arc::new(MockKeyValueDriver::default())]);
     restored.app.startup(None);
     assert_eq!(restored.app.project_name(), Some("Development"));
     assert_eq!(restored.app.workspace.pane_order().len(), 2);
@@ -146,12 +52,10 @@ async fn startup_creates_development_project_and_restores_session() {
 async fn sqlite_end_to_end_browse_query_edit_and_commit() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("notes.db");
-    let mut harness = Harness::new(dir.path(), MockKeyValueDriver::default());
+    let mut harness = Harness::new(dir.path(), vec![Arc::new(MockKeyValueDriver::default())]);
     harness.app.startup(Some("Development"));
     let source = harness.add_sqlite("Notes", &db, Environment::Development);
-    run_sql(
-        &mut harness,
-        source,
+    harness.run_sql(source,
         "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, status TEXT);\n\
          INSERT INTO users (name, status) VALUES ('ada', 'active'), ('bob', 'inactive'), ('cy', 'active');",
     )
@@ -261,7 +165,9 @@ async fn sqlite_end_to_end_browse_query_edit_and_commit() {
     harness.key(KeyChord::plain(KeyCode::Enter));
     harness.settle().await;
 
-    run_sql(&mut harness, source, "SELECT name FROM users ORDER BY id;").await;
+    harness
+        .run_sql(source, "SELECT name FROM users ORDER BY id;")
+        .await;
     let editor = harness.active_editor();
     let ResultKind::Rows { grid, .. } = &mut editor.results[0].kind else {
         panic!("rows expected");
@@ -275,15 +181,15 @@ async fn sqlite_end_to_end_browse_query_edit_and_commit() {
 async fn completion_uses_live_metadata() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("shop.db");
-    let mut harness = Harness::new(dir.path(), MockKeyValueDriver::default());
+    let mut harness = Harness::new(dir.path(), vec![Arc::new(MockKeyValueDriver::default())]);
     harness.app.startup(Some("Development"));
     let source = harness.add_sqlite("Shop", &db, Environment::None);
-    run_sql(
-        &mut harness,
-        source,
-        "CREATE TABLE orders (id INTEGER PRIMARY KEY, total REAL);",
-    )
-    .await;
+    harness
+        .run_sql(
+            source,
+            "CREATE TABLE orders (id INTEGER PRIMARY KEY, total REAL);",
+        )
+        .await;
     harness.app.load_catalog(source);
     harness.settle().await;
     harness.app.new_editor_tab(Some(source), "");
@@ -312,15 +218,15 @@ async fn completion_uses_live_metadata() {
 async fn destructive_statements_need_confirmation_on_production() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("prod.db");
-    let mut harness = Harness::new(dir.path(), MockKeyValueDriver::default());
+    let mut harness = Harness::new(dir.path(), vec![Arc::new(MockKeyValueDriver::default())]);
     harness.app.startup(Some("Production"));
     let source = harness.add_sqlite("Main", &db, Environment::Production);
-    run_sql(
-        &mut harness,
-        source,
-        "CREATE TABLE t (id INTEGER PRIMARY KEY); INSERT INTO t VALUES (1);",
-    )
-    .await;
+    harness
+        .run_sql(
+            source,
+            "CREATE TABLE t (id INTEGER PRIMARY KEY); INSERT INTO t VALUES (1);",
+        )
+        .await;
     harness.app.new_editor_tab(Some(source), "DELETE FROM t");
     harness.keys("f5");
     assert!(matches!(
@@ -349,7 +255,7 @@ async fn key_value_browser_and_console() {
         ("greeting", MockValue::String(b"hello".to_vec())),
         ("queue", MockValue::List(vec![b"a".to_vec(), b"b".to_vec()])),
     ]);
-    let mut harness = Harness::new(dir.path(), kv.clone());
+    let mut harness = Harness::new(dir.path(), vec![Arc::new(kv.clone())]);
     harness.app.startup(Some("Development"));
     let definition = DataSourceDefinition::new("Cache", DriverId::from("mock-kv"));
     let source = definition.id;
@@ -388,7 +294,7 @@ async fn key_value_browser_and_console() {
 #[tokio::test(flavor = "multi_thread")]
 async fn palette_leader_keys_and_which_key() {
     let dir = tempfile::tempdir().unwrap();
-    let mut harness = Harness::new(dir.path(), MockKeyValueDriver::default());
+    let mut harness = Harness::new(dir.path(), vec![Arc::new(MockKeyValueDriver::default())]);
     harness.app.startup(Some("Development"));
     harness.keys("ctrl+p");
     assert!(matches!(
@@ -418,7 +324,7 @@ async fn palette_leader_keys_and_which_key() {
 #[tokio::test(flavor = "multi_thread")]
 async fn unknown_driver_reports_missing_package() {
     let dir = tempfile::tempdir().unwrap();
-    let mut harness = Harness::new(dir.path(), MockKeyValueDriver::default());
+    let mut harness = Harness::new(dir.path(), vec![Arc::new(MockKeyValueDriver::default())]);
     harness.app.startup(Some("Development"));
     let definition = DataSourceDefinition::new("Exotic", DriverId::from("exampledb"));
     let source = definition.id;

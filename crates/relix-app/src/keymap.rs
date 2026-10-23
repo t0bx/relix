@@ -141,6 +141,18 @@ impl Keymap {
         self.keys_for(command).first().map(ToString::to_string)
     }
 
+    /// The key bound to `command` in the first of `contexts` that binds it, which is the
+    /// key that actually triggers the command in the current focus.
+    pub fn key_in_contexts(&self, contexts: &[KeyContext], command: Command) -> Option<String> {
+        contexts.iter().find_map(|context| {
+            self.bindings
+                .get(context)?
+                .iter()
+                .find(|(_, bound)| *bound == command)
+                .map(|(keys, _)| keys.to_string())
+        })
+    }
+
     pub fn bindings_in(&self, context: KeyContext) -> Vec<(KeySequence, Command)> {
         self.bindings.get(&context).cloned().unwrap_or_default()
     }

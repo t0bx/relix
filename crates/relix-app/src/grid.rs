@@ -14,6 +14,7 @@ const MIN_COLUMN_WIDTH: u16 = 4;
 const MAX_COLUMN_WIDTH: u16 = 60;
 const DEFAULT_MAX_WIDTH: u16 = 32;
 const WIDTH_SAMPLE_ROWS: usize = 200;
+const SORT_MARKER_WIDTH: usize = 3;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GridColumn {
@@ -676,7 +677,7 @@ fn fetched_rows(batch: &RowBatch) -> Vec<GridRow> {
 }
 
 fn measure_width(meta: &ColumnMeta, rows: &[Vec<Value>], index: usize) -> u16 {
-    let header = meta.name.chars().count();
+    let header = meta.name.chars().count() + SORT_MARKER_WIDTH;
     let content = rows
         .iter()
         .take(WIDTH_SAMPLE_ROWS)

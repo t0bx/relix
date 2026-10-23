@@ -22,6 +22,8 @@ pub mod result_query;
 pub mod services;
 pub mod tab;
 pub mod table_tab;
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
 pub mod workspace;
 
 pub use app::{App, AppContext, Focus, HitMap, HitTarget};
