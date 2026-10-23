@@ -3,6 +3,7 @@
  * @since 23.10.2026
  */
 
+pub mod cancel_signal;
 pub mod capabilities;
 mod change_checks;
 pub mod connection;
@@ -18,6 +19,7 @@ mod sql_dialect_rules;
 pub mod timeout;
 
 pub use async_trait::async_trait;
+pub use cancel_signal::CancelSignal;
 pub use capabilities::{DatabaseCapability, DriverCapabilities};
 pub use change_checks::ensure_single_row;
 pub use connection::{DatabaseConnection, ServerInfo};
