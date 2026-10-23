@@ -6,8 +6,9 @@
 use crate::connection::RedisConnection;
 use crate::driver::DEFAULT_PORT;
 use crate::errors::map_connect_error;
+use crate::flavor::Flavor;
 use crate::runner::CommandRunner;
-use crate::server_details::{parse_info, redis_version};
+use crate::server_details::parse_info;
 use crate::tls::{build_client, uses_tls};
 use redis::RedisConnectionInfo;
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
@@ -21,7 +22,10 @@ const MAX_RECONNECT_DELAY: Duration = Duration::from_secs(2);
 /// Opens an auto-reconnecting connection and verifies it with `PING`. TLS modes follow
 /// [`build_client`]: `Prefer` behaves like `Disable` because Redis cannot negotiate TLS
 /// opportunistically on a plaintext port.
-pub async fn open_connection(config: &ConnectionConfig) -> Result<RedisConnection, DriverError> {
+pub async fn open_connection(
+    flavor: Flavor,
+    config: &ConnectionConfig,
+) -> Result<RedisConnection, DriverError> {
     let settings = &config.settings;
     let database = parse_database_index(settings.database.as_deref())?;
     let port = settings.port.unwrap_or(DEFAULT_PORT);
@@ -50,14 +54,8 @@ pub async fn open_connection(config: &ConnectionConfig) -> Result<RedisConnectio
             .await
             .map_err(|error| map_connect_error(error, tls_enabled))?;
         let runner = CommandRunner::new(manager);
-        let version = verify_server(&runner).await?;
-        Ok(RedisConnection::new(
-            runner,
-            ServerInfo {
-                product: "Redis".to_owned(),
-                version,
-            },
-        ))
+        let server_info = verify_server(&runner, flavor).await?;
+        Ok(RedisConnection::new(runner, server_info))
     });
     connecting
         .await
@@ -101,11 +99,16 @@ fn handshake_settings(config: &ConnectionConfig, database: i64) -> RedisConnecti
     }
 }
 
-async fn verify_server(runner: &CommandRunner) -> Result<String, DriverError> {
+async fn verify_server(runner: &CommandRunner, flavor: Flavor) -> Result<ServerInfo, DriverError> {
     let mut pipeline = redis::pipe();
     pipeline.cmd("PING").cmd("INFO").arg("server");
     let (_, info): (String, String) = runner.query_pipeline(&pipeline).await?;
-    Ok(redis_version(&parse_info(&info)).unwrap_or_else(|| "unknown".to_owned()))
+    let details = parse_info(&info);
+    let server = Flavor::detect(&details);
+    let version = server
+        .version(&details)
+        .unwrap_or_else(|| "unknown".to_owned());
+    Ok(flavor.server_info(server, &version))
 }
 
 #[cfg(test)]
@@ -124,7 +127,7 @@ mod tests {
             ..relix_core::ConnectionSettings::default()
         };
         let tunneled = ConnectionConfig::new(settings, None).redirected("127.0.0.1", 40000);
-        let Err(error) = open_connection(&tunneled).await else {
+        let Err(error) = open_connection(Flavor::Redis, &tunneled).await else {
             panic!("verification against a forwarded endpoint must not be attempted");
         };
         assert_eq!(error.kind, ErrorKind::Tls);

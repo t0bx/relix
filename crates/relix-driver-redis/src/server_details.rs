@@ -6,8 +6,6 @@
 use crate::runner::CommandRunner;
 use relix_driver_api::DriverError;
 
-const VERSION_KEY: &str = "server.redis_version";
-
 pub async fn server_details(runner: &CommandRunner) -> Result<Vec<(String, String)>, DriverError> {
     let mut pipeline = redis::pipe();
     pipeline.cmd("INFO").cmd("DBSIZE");
@@ -40,13 +38,6 @@ pub fn parse_info(info: &str) -> Vec<(String, String)> {
     entries
 }
 
-pub fn redis_version(details: &[(String, String)]) -> Option<String> {
-    details
-        .iter()
-        .find(|(key, _)| key == VERSION_KEY)
-        .map(|(_, value)| value.clone())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -75,11 +66,5 @@ mod tests {
             parse_info("uptime:5\ngarbage\n"),
             vec![("uptime".to_owned(), "5".to_owned())]
         );
-    }
-
-    #[test]
-    fn version_is_read_from_the_server_section() {
-        assert_eq!(redis_version(&parse_info(SAMPLE)).as_deref(), Some("7.4.1"));
-        assert_eq!(redis_version(&parse_info("# Clients\r\n")), None);
     }
 }

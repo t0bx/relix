@@ -1,6 +1,6 @@
 [package]
 name = "relix-driver-redis"
-description = "Native Redis key-value driver for the RELIX database IDE"
+description = "Native Redis and Valkey key-value driver for the RELIX database IDE"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

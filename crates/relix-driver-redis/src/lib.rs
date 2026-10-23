@@ -10,6 +10,7 @@ mod describe;
 mod driver;
 mod errors;
 mod execute;
+mod flavor;
 mod read_value;
 mod reply;
 mod runner;
@@ -18,4 +19,5 @@ mod server_details;
 mod tls;
 mod writes;
 
-pub use driver::RedisDriver;
+pub use driver::{RedisDriver, ValkeyDriver};
+pub use flavor::Flavor;
