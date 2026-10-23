@@ -6,11 +6,16 @@
 use crate::command::Command;
 use crate::datasource_form::DataSourceForm;
 use crate::input::LineInput;
+use crate::server_manager::ServerManagerState;
 use crate::services::InstallOffer;
+use crate::ssh_form::SshForm;
+use crate::vpn_form::VpnForm;
 use crate::workspace::{PaneId, TabId};
+use relix_connections::HostKeyPrompt;
 use relix_core::keyvalue::KeyName;
-use relix_core::{DataSourceId, DriverId, ProjectId};
+use relix_core::{DataSourceId, DriverId, ProjectId, ServerConfigId};
 use relix_editor::TextBuffer;
+use relix_project::{ServerSecret, TransferMode};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PickerValue {
@@ -145,6 +150,20 @@ pub enum PendingAction {
     },
     RemoveDriver(DriverId),
     SwitchProject(ProjectId),
+    TrustHostKey {
+        prompt: Box<HostKeyPrompt>,
+        retry: Option<DataSourceId>,
+    },
+    ApproveVpn {
+        profile: ServerConfigId,
+        retry: Option<DataSourceId>,
+    },
+    ConnectVpn(ServerConfigId),
+    DeleteServerConfig(ServerConfigId),
+    TransferServerConfig {
+        id: ServerConfigId,
+        mode: TransferMode,
+    },
     Quit,
 }
 
@@ -163,14 +182,34 @@ pub enum PromptAction {
     RenameProject(ProjectId),
     SaveScriptAs(TabId),
     OpenFile,
-    ExportResults { tab: TabId, format: ExportFormat },
+    ExportResults {
+        tab: TabId,
+        format: ExportFormat,
+    },
     ExportProject,
     ImportProject,
-    SetTtl { tab: TabId, key: KeyName },
-    NewKey { tab: TabId },
-    AddElement { tab: TabId },
-    Password { source: DataSourceId },
-    ResultFilter { tab: TabId },
+    SetTtl {
+        tab: TabId,
+        key: KeyName,
+    },
+    NewKey {
+        tab: TabId,
+    },
+    AddElement {
+        tab: TabId,
+    },
+    Password {
+        source: DataSourceId,
+    },
+    RenameServerConfig(ServerConfigId),
+    ServerSecret {
+        server: ServerConfigId,
+        kind: ServerSecret,
+        retry: Option<DataSourceId>,
+    },
+    ResultFilter {
+        tab: TabId,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -269,6 +308,9 @@ pub struct JumpState {
 pub enum Overlay {
     Picker(PickerState),
     DataSourceForm(Box<DataSourceForm>),
+    ServerManager(ServerManagerState),
+    SshForm(Box<SshForm>),
+    VpnForm(Box<VpnForm>),
     Confirm(ConfirmState),
     Prompt(PromptState),
     Viewer(ViewerState),

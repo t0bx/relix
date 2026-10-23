@@ -9,7 +9,7 @@ use crate::notifications::Level;
 use crate::overlay::{ConfirmState, Overlay, PendingAction, PickerState, PromptAction};
 use crate::workspace::Workspace;
 use relix_config::{KeyChord, KeyCode};
-use relix_core::ProjectId;
+use relix_core::{ConfigScope, ProjectId};
 use relix_project::portable::{export_project, import_project};
 use relix_project::{Project, SecretKey};
 use relix_query::{HistoryEntry, QueryHistory};
@@ -132,6 +132,7 @@ impl App {
         self.connections.clear();
         self.catalogs.clear();
         self.session_passwords.clear();
+        self.load_server_catalog(Some(id));
         self.project = Some(project);
         self.restore_session();
         self.refresh_explorer_roots();
@@ -252,7 +253,7 @@ impl App {
         let Some(project) = &self.project else {
             return;
         };
-        let result = export_project(project)
+        let result = export_project(project, self.servers.registry(ConfigScope::Project))
             .map_err(|error| error.to_string())
             .and_then(|text| std::fs::write(path, text).map_err(|error| error.to_string()));
         match result {
@@ -271,7 +272,20 @@ impl App {
                 import_project(&self.context.store, &text, None).map_err(|error| error.to_string())
             });
         match result {
-            Ok(project) => {
+            Ok(imported) => {
+                let project = imported.project;
+                if !imported.servers.is_empty()
+                    && let Err(error) = self.server_store().save(
+                        ConfigScope::Project,
+                        Some(project.id),
+                        &imported.servers,
+                    )
+                {
+                    self.notify(
+                        Level::Warning,
+                        format!("server configurations were not imported: {error}"),
+                    );
+                }
                 self.notify(
                     Level::Success,
                     format!("imported project '{}'", project.name),

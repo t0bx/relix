@@ -6,7 +6,7 @@
 use super::App;
 use super::explorer_actions::edit_line;
 use crate::buffer_keys::apply_buffer_key;
-use crate::datasource_form::{FieldId, FieldValue};
+use crate::form::{FormCommand, FormStatus};
 use crate::notifications::Level;
 use crate::overlay::{
     ColumnChooserState, ConfirmState, JumpState, Overlay, PendingAction, PickerPurpose,
@@ -25,6 +25,9 @@ impl App {
         let keep = match overlay {
             Overlay::Picker(picker) => self.picker_key(picker, chord),
             Overlay::DataSourceForm(form) => self.form_key(form, chord),
+            Overlay::ServerManager(state) => self.server_manager_key(state, chord),
+            Overlay::SshForm(form) => self.ssh_form_key(form, chord),
+            Overlay::VpnForm(form) => self.vpn_form_key(form, chord),
             Overlay::Confirm(confirm) => self.confirm_key(confirm, chord),
             Overlay::Prompt(prompt) => self.prompt_key(prompt, chord),
             Overlay::Viewer(viewer) => self.viewer_key(viewer, chord),
@@ -80,67 +83,23 @@ impl App {
         mut form: Box<crate::datasource_form::DataSourceForm>,
         chord: KeyChord,
     ) -> Option<Overlay> {
-        let ctrl = chord.modifiers.ctrl;
-        match chord.code {
-            KeyCode::Esc => return None,
-            KeyCode::Char('t') if ctrl => match form.build() {
+        match form.handle_key(chord) {
+            FormCommand::Cancel => return None,
+            FormCommand::Test => match form.build() {
                 Ok((definition, password)) => {
-                    form.testing = true;
-                    form.status = Some(crate::datasource_form::FormStatus {
-                        message: "testing connection…".into(),
-                        success: true,
-                    });
+                    form.set_status(FormStatus::success("testing connection…"), true);
                     self.test_connection(definition, password);
                 }
-                Err(error) => {
-                    form.status = Some(crate::datasource_form::FormStatus {
-                        message: error,
-                        success: false,
-                    })
-                }
+                Err(error) => form.set_status(FormStatus::failure(error), false),
             },
-            KeyCode::Enter | KeyCode::Char('s') if ctrl || chord.code == KeyCode::Enter => {
-                match form.build() {
-                    Ok((definition, password)) => {
-                        self.save_data_source(definition, password);
-                        return None;
-                    }
-                    Err(error) => {
-                        form.status = Some(crate::datasource_form::FormStatus {
-                            message: error,
-                            success: false,
-                        })
-                    }
+            FormCommand::Submit => match form.build() {
+                Ok((definition, password)) => {
+                    self.save_data_source(definition, password);
+                    return None;
                 }
-            }
-            KeyCode::Tab | KeyCode::Down => form.move_focus(1),
-            KeyCode::BackTab | KeyCode::Up => form.move_focus(-1),
-            _ => {
-                let focused_id = form.fields.get(form.focused).map(|field| field.id);
-                let Some(field) = form.focused_field_mut() else {
-                    return Some(Overlay::DataSourceForm(form));
-                };
-                match &mut field.value {
-                    FieldValue::Choice { .. } => match chord.code {
-                        KeyCode::Left => form.cycle_choice(-1),
-                        KeyCode::Right | KeyCode::Char(' ') => form.cycle_choice(1),
-                        _ => {}
-                    },
-                    FieldValue::Toggle(_) => {
-                        if matches!(
-                            chord.code,
-                            KeyCode::Char(' ') | KeyCode::Left | KeyCode::Right
-                        ) {
-                            form.toggle_focused();
-                        }
-                    }
-                    FieldValue::Text(input) | FieldValue::Secret(input) => {
-                        if edit_line(input, chord) && focused_id == Some(FieldId::Password) {
-                            form.password_touched = true;
-                        }
-                    }
-                }
-            }
+                Err(error) => form.set_status(FormStatus::failure(error), false),
+            },
+            FormCommand::Shortcut(_) | FormCommand::Edited(_) | FormCommand::Ignored => {}
         }
         Some(Overlay::DataSourceForm(form))
     }
@@ -323,6 +282,13 @@ impl App {
             PendingAction::DeleteKey { tab, key } => self.delete_key(tab, key),
             PendingAction::DeleteElement { tab } => self.delete_element(tab),
             PendingAction::InstallDriver { offer, retry } => self.install_driver(offer, retry),
+            PendingAction::TrustHostKey { prompt, retry } => self.trust_host_key(&prompt, retry),
+            PendingAction::ApproveVpn { profile, retry } => self.approve_vpn(profile, retry),
+            PendingAction::ConnectVpn(profile) => self.approve_and_connect_vpn(profile),
+            PendingAction::DeleteServerConfig(id) => self.delete_server_config(id),
+            PendingAction::TransferServerConfig { id, mode } => {
+                self.transfer_server_config(id, mode)
+            }
             PendingAction::RemoveDriver(id) => self.remove_driver(&id),
             PendingAction::SwitchProject(id) => self.switch_project(id),
             PendingAction::Quit => {
@@ -349,6 +315,14 @@ impl App {
             PromptAction::NewKey { tab } => self.create_key(tab, &text),
             PromptAction::AddElement { tab } => self.add_element(tab, &text),
             PromptAction::Password { source } => self.submit_password(source, text),
+            PromptAction::RenameServerConfig(id) if !trimmed.is_empty() => {
+                self.rename_server_config(id, &trimmed)
+            }
+            PromptAction::ServerSecret {
+                server,
+                kind,
+                retry,
+            } => self.submit_server_secret(server, kind, text, retry),
             PromptAction::ResultFilter { tab } => self.apply_result_filter(tab, &trimmed),
             _ => self.notify(Level::Info, "nothing entered"),
         }

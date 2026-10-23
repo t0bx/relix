@@ -381,15 +381,13 @@ fn overlay_paste(overlay: &mut Overlay, text: &str) {
         Overlay::Prompt(prompt) => prompt.input.insert_str(text),
         Overlay::TextEdit(edit) => edit.buffer.insert_text(text),
         Overlay::DataSourceForm(form) => {
-            if let Some(field) = form.focused_field_mut()
-                && let crate::datasource_form::FieldValue::Text(input)
-                | crate::datasource_form::FieldValue::Secret(input) = &mut field.value
-            {
-                input.insert_str(text);
-                if field.id == crate::datasource_form::FieldId::Password {
-                    form.password_touched = true;
-                }
-            }
+            form.form.paste(text);
+        }
+        Overlay::SshForm(form) => {
+            form.form.paste(text);
+        }
+        Overlay::VpnForm(form) => {
+            form.form.paste(text);
         }
         _ => {}
     }

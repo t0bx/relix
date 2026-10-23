@@ -13,10 +13,18 @@ mod explorer_actions;
 mod focus;
 mod grid_actions;
 mod keyvalue_actions;
+mod network_credentials;
+mod network_failures;
 mod overlay_input;
 mod pickers;
 mod projects;
 mod results_actions;
+mod server_checks;
+mod server_configs;
+mod server_form_actions;
+mod server_manager_actions;
+#[cfg(test)]
+mod server_workflow_tests;
 mod session;
 mod table_actions;
 #[cfg(test)]
@@ -35,13 +43,17 @@ use crate::services::{Clipboard, DriverService};
 use crate::tab::Tab;
 use crate::table_tab::TableFocus;
 use crate::workspace::{Area, PaneId, TabId, Workspace};
-pub use connections::{ConnectionState, ConnectionStatus};
+pub use connections::{ConnectionIndicator, ConnectionState, ConnectionStatus};
+pub(crate) use explorer_actions::edit_line;
 use relix_config::{AppPaths, GlobalSettings, KeyChord, Theme, ThemeCatalog};
-use relix_core::{DataSourceId, Secret};
+use relix_connections::ConnectionManager;
+use relix_core::{DataSourceId, Secret, ServerConfigId};
 use relix_editor::CompletionCatalog;
-use relix_project::{Project, ProjectStore, RecentProjects, SecretStore};
+use relix_project::{
+    Project, ProjectStore, RecentProjects, SecretStore, ServerCatalog, ServerSecret,
+};
 use relix_query::{QueryHistory, RecentList};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::future::Future;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -55,6 +67,7 @@ pub struct AppContext {
     pub store: ProjectStore,
     pub secrets: Arc<dyn SecretStore>,
     pub drivers: Arc<dyn DriverService>,
+    pub network: ConnectionManager,
     pub clipboard: Box<dyn Clipboard>,
     pub runtime: tokio::runtime::Handle,
     pub events: mpsc::Sender<AppEvent>,
@@ -110,6 +123,7 @@ pub struct App {
     pub theme: Theme,
     pub keymap: Keymap,
     pub project: Option<Project>,
+    pub servers: ServerCatalog,
     pub recent: RecentProjects,
     pub workspace: Workspace<Tab>,
     pub explorer: ExplorerState,
@@ -127,6 +141,8 @@ pub struct App {
     pub status: String,
     pub hit_map: HitMap,
     session_passwords: HashMap<DataSourceId, Secret>,
+    server_secrets: HashMap<(ServerConfigId, ServerSecret), Secret>,
+    vpn_approvals: HashSet<ServerConfigId>,
     requests: RequestCounter,
     context: AppContext,
     last_session_save: Instant,
@@ -152,6 +168,7 @@ impl App {
             theme,
             keymap,
             project: None,
+            servers: ServerCatalog::default(),
             recent,
             workspace: Workspace::new(),
             explorer: ExplorerState::default(),
@@ -167,6 +184,8 @@ impl App {
             status: String::new(),
             hit_map: HitMap::default(),
             session_passwords: HashMap::new(),
+            server_secrets: HashMap::new(),
+            vpn_approvals: HashSet::new(),
             requests: RequestCounter::default(),
             context,
             last_session_save: Instant::now(),

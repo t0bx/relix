@@ -56,6 +56,7 @@ impl App {
                 self.focus = Focus::Workspace;
             }
             Command::AddDataSource => self.open_data_source_form(None),
+            Command::ServerConfigurations => self.open_server_manager(),
             Command::ShowDrivers => self.open_driver_manager(),
             Command::ShowHistory => self.open_history_picker(),
             Command::CycleTheme => self.cycle_theme(),

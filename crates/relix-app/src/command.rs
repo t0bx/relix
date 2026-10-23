@@ -43,6 +43,7 @@ pub enum Command {
     PreviousTab,
     SelectTab(u8),
     AddDataSource,
+    ServerConfigurations,
     ShowDrivers,
     ShowHistory,
     CycleTheme,
@@ -463,6 +464,16 @@ pub static COMMANDS: &[CommandSpec] = &[
             &[],
         ),
         "a",
+    ),
+    led(
+        spec(
+            C::ServerConfigurations,
+            "servers.open",
+            "Server configurations (SSH / VPN)",
+            K::Global,
+            &[],
+        ),
+        "n",
     ),
     led(
         spec(
