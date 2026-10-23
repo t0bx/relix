@@ -1,0 +1,24 @@
+[package]
+name = "relix-driver-duckdb"
+description = "DuckDB driver for the RELIX database IDE"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+relix-core.workspace = true
+relix-driver-api.workspace = true
+relix-query = { path = "../relix-query" }
+async-trait.workspace = true
+tokio.workspace = true
+duckdb = { version = "~1.10506.1", default-features = false, features = ["bundled"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+tokio.workspace = true
+
+[lints]
+workspace = true
