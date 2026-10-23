@@ -1,0 +1,23 @@
+[package]
+name = "relix-tls"
+description = "Shared rustls client configuration for RELIX database drivers"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+relix-core.workspace = true
+relix-driver-api.workspace = true
+rustls = { version = "0.23.37", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pki-types = { version = "1.15.1", features = ["std"] }
+tokio = { workspace = true, features = ["fs"] }
+webpki-roots = "1.0.9"
+
+[dev-dependencies]
+tokio.workspace = true
+
+[lints]
+workspace = true
