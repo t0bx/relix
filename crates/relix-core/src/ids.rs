@@ -41,6 +41,7 @@ macro_rules! uuid_id {
 
 uuid_id!(ProjectId);
 uuid_id!(DataSourceId);
+uuid_id!(ServerConfigId);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -52,6 +53,26 @@ impl DriverId {
     pub const MARIADB: &'static str = "mariadb";
     pub const SQLITE: &'static str = "sqlite";
     pub const REDIS: &'static str = "redis";
+    pub const COCKROACHDB: &'static str = "cockroachdb";
+    pub const YUGABYTEDB: &'static str = "yugabytedb";
+    pub const TIMESCALEDB: &'static str = "timescaledb";
+    pub const TIDB: &'static str = "tidb";
+    pub const VALKEY: &'static str = "valkey";
+    pub const MSSQL: &'static str = "mssql";
+    pub const DUCKDB: &'static str = "duckdb";
+    pub const ORACLE: &'static str = "oracle";
+    pub const CLICKHOUSE: &'static str = "clickhouse";
+    pub const SNOWFLAKE: &'static str = "snowflake";
+    pub const BIGQUERY: &'static str = "bigquery";
+    pub const TRINO: &'static str = "trino";
+    pub const MONGODB: &'static str = "mongodb";
+    pub const CASSANDRA: &'static str = "cassandra";
+    pub const SCYLLADB: &'static str = "scylladb";
+    pub const INFLUXDB: &'static str = "influxdb";
+    pub const NEO4J: &'static str = "neo4j";
+    pub const ELASTICSEARCH: &'static str = "elasticsearch";
+    pub const OPENSEARCH: &'static str = "opensearch";
+    pub const DYNAMODB: &'static str = "dynamodb";
 
     pub fn new(id: impl Into<String>) -> Self {
         Self(id.into())

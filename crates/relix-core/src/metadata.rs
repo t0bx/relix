@@ -22,11 +22,20 @@ pub enum ObjectKind {
     Procedure,
     Sequence,
     Trigger,
+    NodeLabel,
+    RelationshipType,
 }
 
 impl ObjectKind {
     pub fn is_relation(self) -> bool {
-        matches!(self, Self::Table | Self::View | Self::MaterializedView)
+        matches!(
+            self,
+            Self::Table
+                | Self::View
+                | Self::MaterializedView
+                | Self::NodeLabel
+                | Self::RelationshipType
+        )
     }
 
     pub fn label(self) -> &'static str {
@@ -38,6 +47,8 @@ impl ObjectKind {
             Self::Procedure => "procedure",
             Self::Sequence => "sequence",
             Self::Trigger => "trigger",
+            Self::NodeLabel => "node label",
+            Self::RelationshipType => "relationship type",
         }
     }
 }

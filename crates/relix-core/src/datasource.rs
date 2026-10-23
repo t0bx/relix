@@ -4,7 +4,9 @@
  */
 
 use crate::ids::{DataSourceId, DriverId};
+use crate::network::NetworkSettings;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -86,6 +88,9 @@ pub struct ConnectionSettings {
     pub connect_timeout_secs: u64,
     pub tls: TlsSettings,
     pub save_password: bool,
+    pub query_timeout_secs: Option<u64>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub properties: BTreeMap<String, String>,
 }
 
 impl Default for ConnectionSettings {
@@ -100,6 +105,8 @@ impl Default for ConnectionSettings {
             connect_timeout_secs: 10,
             tls: TlsSettings::default(),
             save_password: true,
+            query_timeout_secs: None,
+            properties: BTreeMap::new(),
         }
     }
 }
@@ -107,6 +114,19 @@ impl Default for ConnectionSettings {
 impl ConnectionSettings {
     pub fn connect_timeout(&self) -> Duration {
         Duration::from_secs(self.connect_timeout_secs.max(1))
+    }
+
+    pub fn query_timeout(&self) -> Option<Duration> {
+        self.query_timeout_secs
+            .filter(|seconds| *seconds > 0)
+            .map(Duration::from_secs)
+    }
+
+    pub fn property(&self, name: &str) -> Option<&str> {
+        self.properties
+            .get(name)
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
     }
 }
 
@@ -121,6 +141,8 @@ pub struct DataSourceDefinition {
     pub color: Option<String>,
     #[serde(default)]
     pub settings: ConnectionSettings,
+    #[serde(default)]
+    pub network: NetworkSettings,
 }
 
 impl DataSourceDefinition {
@@ -132,6 +154,7 @@ impl DataSourceDefinition {
             environment: Environment::None,
             color: None,
             settings: ConnectionSettings::default(),
+            network: NetworkSettings::default(),
         }
     }
 }
@@ -159,15 +182,34 @@ impl fmt::Debug for Secret {
 pub struct ConnectionConfig {
     pub settings: ConnectionSettings,
     pub password: Option<Secret>,
+    pub tls_server_name: Option<String>,
 }
 
 impl ConnectionConfig {
     pub fn new(settings: ConnectionSettings, password: Option<Secret>) -> Self {
-        Self { settings, password }
+        Self {
+            settings,
+            password,
+            tls_server_name: None,
+        }
     }
 
     pub fn host_or_default(&self) -> &str {
         self.settings.host.as_deref().unwrap_or("localhost")
+    }
+
+    pub fn tls_host(&self) -> &str {
+        self.tls_server_name
+            .as_deref()
+            .unwrap_or_else(|| self.host_or_default())
+    }
+
+    pub fn redirected(&self, host: &str, port: u16) -> Self {
+        let mut redirected = self.clone();
+        redirected.tls_server_name = Some(self.tls_host().to_owned());
+        redirected.settings.host = Some(host.to_owned());
+        redirected.settings.port = Some(port);
+        redirected
     }
 }
 
@@ -189,5 +231,36 @@ mod tests {
         assert_eq!(settings.host.as_deref(), Some("db"));
         assert_eq!(settings.connect_timeout_secs, 10);
         assert_eq!(settings.tls.mode, TlsMode::Prefer);
+        assert!(settings.properties.is_empty());
+        assert_eq!(settings.query_timeout(), None);
+    }
+
+    #[test]
+    fn redirected_configs_keep_the_tls_server_name() {
+        let settings = ConnectionSettings {
+            host: Some("db.internal".into()),
+            port: Some(5432),
+            ..ConnectionSettings::default()
+        };
+        let config = ConnectionConfig::new(settings, None);
+        let tunneled = config.redirected("127.0.0.1", 40123);
+        assert_eq!(tunneled.host_or_default(), "127.0.0.1");
+        assert_eq!(tunneled.settings.port, Some(40123));
+        assert_eq!(tunneled.tls_host(), "db.internal");
+        assert_eq!(
+            tunneled.redirected("127.0.0.1", 1).tls_host(),
+            "db.internal"
+        );
+    }
+
+    #[test]
+    fn blank_properties_are_ignored() {
+        let mut settings = ConnectionSettings::default();
+        settings.properties.insert("warehouse".into(), "  ".into());
+        settings
+            .properties
+            .insert("role".into(), " analyst ".into());
+        assert_eq!(settings.property("warehouse"), None);
+        assert_eq!(settings.property("role"), Some("analyst"));
     }
 }
