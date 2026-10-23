@@ -80,6 +80,11 @@ impl TextBuffer {
         self.saved_version = self.version;
     }
 
+    /// Flags restored, not yet saved content (e.g. a recovered draft) as modified.
+    pub fn mark_unsaved(&mut self) {
+        self.saved_version = u64::MAX;
+    }
+
     pub fn cursor(&self) -> Position {
         self.cursor
     }

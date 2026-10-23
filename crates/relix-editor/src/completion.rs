@@ -49,6 +49,23 @@ pub struct CompletionItem {
     score: u32,
 }
 
+impl CompletionItem {
+    pub fn new(
+        label: String,
+        insert_text: String,
+        kind: CompletionKind,
+        detail: Option<String>,
+    ) -> Self {
+        Self {
+            label,
+            insert_text,
+            kind,
+            detail,
+            score: 0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CompletionResult {
     pub replace_start: usize,
