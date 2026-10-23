@@ -6,6 +6,7 @@
 pub mod error;
 pub mod jsonl;
 pub mod model;
+mod platform_store;
 pub mod portable;
 pub mod recent;
 pub mod secrets;

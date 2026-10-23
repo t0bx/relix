@@ -73,8 +73,8 @@ impl SecretStore for MemorySecretStore {
 pub struct KeyringSecretStore;
 
 impl KeyringSecretStore {
-    fn entry(key: &SecretKey) -> Result<keyring::Entry, keyring::Error> {
-        keyring::Entry::new(KEYRING_SERVICE, key.as_str())
+    fn entry(key: &SecretKey) -> Result<keyring_core::Entry, keyring_core::Error> {
+        crate::platform_store::entry(KEYRING_SERVICE, key.as_str())
     }
 }
 
@@ -82,7 +82,7 @@ impl SecretStore for KeyringSecretStore {
     fn get(&self, key: &SecretKey) -> Result<Option<Secret>, ProjectError> {
         match Self::entry(key).and_then(|entry| entry.get_password()) {
             Ok(password) => Ok(Some(Secret::new(password))),
-            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(keyring_core::Error::NoEntry) => Ok(None),
             Err(error) => Err(ProjectError::Secret(error.to_string())),
         }
     }
@@ -95,7 +95,7 @@ impl SecretStore for KeyringSecretStore {
 
     fn delete(&self, key: &SecretKey) -> Result<(), ProjectError> {
         match Self::entry(key).and_then(|entry| entry.delete_credential()) {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
             Err(error) => Err(ProjectError::Secret(error.to_string())),
         }
     }
