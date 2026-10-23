@@ -6,7 +6,7 @@
 use crate::app::{App, AppContext, EVENT_QUEUE_CAPACITY};
 use crate::editor_tab::EditorTab;
 use crate::events::{AppEvent, InputEvent};
-use crate::services::{MemoryClipboard, StaticDriverService};
+use crate::services::{DriverService, MemoryClipboard, StaticDriverService};
 use crate::tab::Tab;
 use relix_config::{AppPaths, GlobalSettings, KeyChord, KeyCode, ThemeCatalog};
 use relix_core::{DataSourceDefinition, DataSourceId, DriverId, Environment};
@@ -29,18 +29,22 @@ pub struct AppHarness {
 
 impl AppHarness {
     pub fn new(root: &Path, extra_drivers: Vec<Arc<dyn DatabaseDriver>>) -> Self {
+        let mut drivers: Vec<Arc<dyn DatabaseDriver>> = vec![Arc::new(SqliteDriver)];
+        drivers.extend(extra_drivers);
+        Self::with_driver_service(root, Arc::new(StaticDriverService::new(drivers)))
+    }
+
+    pub fn with_driver_service(root: &Path, drivers: Arc<dyn DriverService>) -> Self {
         let paths = AppPaths::rooted(root);
         if let Err(error) = paths.ensure() {
             panic!("cannot prepare test directories: {error}");
         }
         let (sender, events) = mpsc::channel(EVENT_QUEUE_CAPACITY);
-        let mut drivers: Vec<Arc<dyn DatabaseDriver>> = vec![Arc::new(SqliteDriver)];
-        drivers.extend(extra_drivers);
         let context = AppContext {
             store: ProjectStore::new(paths.projects_dir()),
             paths,
             secrets: Arc::new(MemorySecretStore::default()),
-            drivers: Arc::new(StaticDriverService::new(drivers)),
+            drivers,
             clipboard: Box::new(MemoryClipboard::default()),
             runtime: tokio::runtime::Handle::current(),
             events: sender,

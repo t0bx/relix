@@ -350,3 +350,84 @@ async fn unknown_driver_reports_missing_package() {
         "{messages:?}"
     );
 }
+
+struct InstallableDriverService {
+    driver: Arc<MockKeyValueDriver>,
+    installed: std::sync::atomic::AtomicBool,
+}
+
+#[async_trait::async_trait]
+impl crate::services::DriverService for InstallableDriverService {
+    fn driver(&self, id: &DriverId) -> Option<Arc<dyn relix_driver_api::DatabaseDriver>> {
+        let installed = self.installed.load(std::sync::atomic::Ordering::SeqCst);
+        (installed && id.as_str() == "mock-kv")
+            .then(|| self.driver.clone() as Arc<dyn relix_driver_api::DatabaseDriver>)
+    }
+
+    fn descriptors(&self) -> Vec<crate::services::DriverDescriptor> {
+        Vec::new()
+    }
+
+    async fn find_offer(
+        &self,
+        id: &DriverId,
+    ) -> Result<Option<crate::services::InstallOffer>, String> {
+        Ok(Some(crate::services::InstallOffer {
+            id: id.clone(),
+            name: "Mock KV connector".into(),
+            version: "1.2.0".into(),
+            source: "Verified registry (drivers.example.com)".into(),
+            size_bytes: 8_808_038,
+            description: "test connector".into(),
+        }))
+    }
+
+    async fn install(&self, _id: &DriverId) -> Result<String, String> {
+        self.installed
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        Ok("1.2.0".into())
+    }
+
+    async fn updates(&self) -> Result<Vec<crate::services::InstallOffer>, String> {
+        Ok(Vec::new())
+    }
+
+    fn remove(&self, _id: &DriverId) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn missing_driver_is_offered_installed_after_approval_and_connection_retried() {
+    let dir = tempfile::tempdir().unwrap();
+    let service = Arc::new(InstallableDriverService {
+        driver: Arc::new(MockKeyValueDriver::default()),
+        installed: std::sync::atomic::AtomicBool::new(false),
+    });
+    let mut harness = Harness::with_driver_service(dir.path(), service.clone());
+    harness.app.startup(Some("Development"));
+    let source = harness.add_data_source(DataSourceDefinition::new(
+        "Exotic",
+        DriverId::from("mock-kv"),
+    ));
+    harness.app.connect(source);
+    harness.settle().await;
+    let Some(Overlay::Confirm(confirm)) = harness.app.overlays.last() else {
+        panic!("installation must be approved first");
+    };
+    let text = confirm.lines.join("\n");
+    assert!(text.contains("Mock KV connector v1.2.0"));
+    assert!(text.contains("Verified registry"));
+    assert!(text.contains("8.4 MB"));
+    assert!(
+        !service.installed.load(std::sync::atomic::Ordering::SeqCst),
+        "nothing installed before approval"
+    );
+    harness.key(KeyChord::plain(KeyCode::Enter));
+    harness.settle().await;
+    assert!(service.installed.load(std::sync::atomic::Ordering::SeqCst));
+    assert_eq!(
+        harness.app.connection_status(source),
+        ConnectionStatus::Connected
+    );
+}
