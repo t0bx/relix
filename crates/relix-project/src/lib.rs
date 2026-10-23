@@ -25,7 +25,7 @@ pub use server_catalog::{CatalogEntry, ReferenceError, ServerCatalog, TransferMo
 pub use server_store::{RegistryLoad, ServerConfigStore};
 pub use servers::{ServerConfig, ServerRegistry};
 pub use session::{
-    EditorSnapshot, KeyValueSnapshot, LayoutSnapshot, PaneSnapshot, SessionState, SplitDirection,
-    TabSnapshot, TableSnapshot,
+    DocumentSnapshot, EditorSnapshot, KeyValueSnapshot, LayoutSnapshot, PaneSnapshot, SessionState,
+    SplitDirection, TabSnapshot, TableSnapshot,
 };
 pub use store::ProjectStore;

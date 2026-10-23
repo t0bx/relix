@@ -3,7 +3,7 @@
  * @since 23.10.2026
  */
 
-use relix_core::{DataSourceId, SortKey, TableRef};
+use relix_core::{CollectionKind, CollectionRef, DataSourceId, SortKey, TableRef};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -43,11 +43,20 @@ pub struct KeyValueSnapshot {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DocumentSnapshot {
+    pub data_source: DataSourceId,
+    pub collection: CollectionRef,
+    pub collection_kind: CollectionKind,
+    pub filter: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum TabSnapshot {
     Editor(EditorSnapshot),
     Table(TableSnapshot),
     KeyValue(KeyValueSnapshot),
+    Document(DocumentSnapshot),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
