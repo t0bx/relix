@@ -1,0 +1,27 @@
+[package]
+name = "relix-connections"
+description = "Connection manager composing VPN, SSH tunnels and database drivers for RELIX"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+relix-core.workspace = true
+relix-driver-api.workspace = true
+relix-project.workspace = true
+relix-ssh = { path = "../relix-ssh" }
+relix-vpn = { path = "../relix-vpn" }
+async-trait.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+relix-driver-sqlite = { path = "../relix-driver-sqlite" }
+relix-testing = { workspace = true, features = ["ssh"] }
+tempfile = "3.27.0"
+
+[lints]
+workspace = true
