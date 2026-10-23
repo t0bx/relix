@@ -1,0 +1,6 @@
+[advisories]
+# RUSTSEC-2023-0071 (rsa, Marvin attack): no fixed release exists. Relix only uses the
+# rsa crate through russh to sign SSH authentication challenges with the user's own key,
+# locally and once per login; the attack needs many precisely timed private-key
+# operations observed by the attacker. Remove this entry once a fixed rsa is released.
+ignore = ["RUSTSEC-2023-0071"]
