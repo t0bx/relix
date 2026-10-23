@@ -47,7 +47,7 @@ pub fn draw(frame: &mut Frame<'_>, area: Rect, form: &dyn FormView, ui: &UiState
             FieldValue::Text(text) | FieldValue::Secret(text) => {
                 let masked = matches!(row.value, FieldValue::Secret(_));
                 let position = input(buffer, value_area, text, value_style, masked);
-                if let Some(placeholder) = row.placeholder.filter(|_| text.is_empty()) {
+                if let Some(placeholder) = row.placeholder.as_deref().filter(|_| text.is_empty()) {
                     put(
                         buffer,
                         value_area.x,

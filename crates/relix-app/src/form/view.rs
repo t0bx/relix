@@ -10,7 +10,7 @@ pub struct FormRow<'a> {
     pub label: &'static str,
     pub value: &'a FieldValue,
     pub focused: bool,
-    pub placeholder: Option<&'static str>,
+    pub placeholder: Option<String>,
 }
 
 pub trait FormView {

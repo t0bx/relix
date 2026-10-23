@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 use relix_core::{Dialect, DriverId};
-use relix_driver_api::{ConnectionTarget, DatabaseDriver, DriverCapabilities};
+use relix_driver_api::{ConnectionProperty, ConnectionTarget, DatabaseDriver, DriverCapabilities};
 use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,6 +19,7 @@ pub struct DriverDescriptor {
     pub dialect: Option<Dialect>,
     pub capabilities: DriverCapabilities,
     pub default_port: Option<u16>,
+    pub properties: Vec<ConnectionProperty>,
 }
 
 impl DriverDescriptor {
@@ -41,6 +42,7 @@ impl DriverDescriptor {
             target,
             dialect: None,
             capabilities,
+            properties: Vec::new(),
         }
     }
 }
@@ -124,6 +126,7 @@ pub fn describe_driver(driver: &dyn DatabaseDriver, status: &str) -> DriverDescr
         target: metadata.target,
         dialect: metadata.dialect,
         capabilities: driver.capabilities(),
+        properties: driver.connection_properties(),
     }
 }
 

@@ -310,17 +310,17 @@ impl FormView for SshForm {
                     (FieldValue::Secret(input), SshField::Secret)
                         if input.is_empty() && !self.form.is_touched(SshField::Secret) =>
                     {
-                        Some(if stored {
+                        Some(String::from(if stored {
                             "(stored)"
                         } else {
                             "(asked when needed)"
-                        })
+                        }))
                     }
                     (FieldValue::Text(input), SshField::KnownHosts) if input.is_empty() => {
-                        Some("~/.ssh/known_hosts + Relix known hosts")
+                        Some("~/.ssh/known_hosts + Relix known hosts".into())
                     }
                     (FieldValue::Text(input), SshField::PrivateKey) if input.is_empty() => {
-                        Some("~/.ssh/id_ed25519")
+                        Some("~/.ssh/id_ed25519".into())
                     }
                     _ => None,
                 },

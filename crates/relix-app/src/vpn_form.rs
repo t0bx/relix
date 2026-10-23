@@ -231,10 +231,10 @@ impl FormView for VpnForm {
                 focused: index == self.form.focused,
                 placeholder: match (&field.value, field.id) {
                     (FieldValue::Text(input), VpnField::Interface) if input.is_empty() => {
-                        Some("e.g. wg0, utun4 (verifies the tunnel)")
+                        Some("e.g. wg0, utun4 (verifies the tunnel)".into())
                     }
                     (FieldValue::Text(input), VpnField::ProbeAddress) if input.is_empty() => {
-                        Some("host:port reachable only through the VPN")
+                        Some("host:port reachable only through the VPN".into())
                     }
                     _ => None,
                 },

@@ -485,6 +485,7 @@ impl DataSourceForm {
             query_timeout_secs: query_timeout.filter(|seconds| *seconds > 0),
             properties: parse_properties(&self.form.text(FieldId::Properties))?,
         };
+        self.check_required_properties(driver, &settings.properties)?;
         let definition = DataSourceDefinition {
             id: self.editing.unwrap_or_default(),
             name,
@@ -502,6 +503,55 @@ impl DataSourceForm {
             .filter(|password| !password.is_empty())
             .map(Secret::new);
         Ok((definition, password))
+    }
+
+    fn properties_hint(&self) -> String {
+        let known = self
+            .selected_driver()
+            .map(|driver| driver.properties.as_slice())
+            .unwrap_or_default();
+        if known.is_empty() {
+            return "key=value; key=value".into();
+        }
+        let mut names: Vec<String> = known
+            .iter()
+            .map(|property| {
+                if property.required {
+                    format!("{}=… (required)", property.name)
+                } else {
+                    format!("{}=…", property.name)
+                }
+            })
+            .collect();
+        names.sort_by_key(|name| !name.contains("required"));
+        names.join("; ")
+    }
+
+    fn check_required_properties(
+        &self,
+        driver: &DriverDescriptor,
+        properties: &BTreeMap<String, String>,
+    ) -> Result<(), String> {
+        let missing: Vec<&str> = driver
+            .properties
+            .iter()
+            .filter(|property| property.required)
+            .filter(|property| {
+                properties
+                    .get(property.name)
+                    .is_none_or(|value| value.trim().is_empty())
+            })
+            .map(|property| property.name)
+            .collect();
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "{} needs the properties: {}",
+                driver.name,
+                missing.join(", ")
+            ))
+        }
     }
 
     pub fn servers(&self) -> &ServerChoices {
@@ -534,16 +584,16 @@ impl FormView for DataSourceForm {
                             && self.editing.is_some()
                             && !self.form.is_touched(FieldId::Password) =>
                     {
-                        Some("(unchanged)")
+                        Some("(unchanged)".into())
                     }
                     (FieldValue::Text(input), FieldId::Properties) if input.is_empty() => {
-                        Some("key=value; key=value")
+                        Some(self.properties_hint())
                     }
                     (FieldValue::Text(input), FieldId::LocalPort) if input.is_empty() => {
-                        Some("automatic")
+                        Some("automatic".into())
                     }
                     (FieldValue::Text(input), FieldId::QueryTimeout) if input.is_empty() => {
-                        Some("none")
+                        Some("none".into())
                     }
                     _ => None,
                 },
@@ -590,12 +640,18 @@ mod tests {
                 ConnectionTarget::File,
                 DriverCapabilities::relational(),
             ),
-            DriverDescriptor::test(
-                "bigquery",
-                "BigQuery",
-                ConnectionTarget::Cloud,
-                DriverCapabilities::relational(),
-            ),
+            DriverDescriptor {
+                properties: vec![relix_driver_api::ConnectionProperty::required(
+                    "project_id",
+                    "Google Cloud project",
+                )],
+                ..DriverDescriptor::test(
+                    "bigquery",
+                    "BigQuery",
+                    ConnectionTarget::Cloud,
+                    DriverCapabilities::relational(),
+                )
+            },
         ]
     }
 
@@ -708,6 +764,16 @@ mod tests {
                 .unwrap_err()
                 .contains("SSH tunnels cannot carry it")
         );
+        form.form.set_choice(FieldId::NetworkMode, 0);
+        assert!(
+            form.build()
+                .unwrap_err()
+                .contains("needs the properties: project_id")
+        );
+        assert!(form.properties_hint().contains("project_id=… (required)"));
+        form.form
+            .set_text(FieldId::Properties, "project_id=analytics-prod");
+        assert!(form.build().is_ok());
     }
 
     #[test]
