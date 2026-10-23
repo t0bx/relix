@@ -1,0 +1,32 @@
+[package]
+name = "relix-driver-bigquery"
+description = "Native Google BigQuery driver for the RELIX database IDE, built on the BigQuery REST API v2"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+relix-core.workspace = true
+relix-driver-api.workspace = true
+relix-driver-http = { path = "../relix-driver-http" }
+async-trait.workspace = true
+base64 = "0.22.1"
+chrono = { version = "0.4.45", default-features = false, features = ["std"] }
+gcp_auth = "0.12.7"
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+relix-testing = { path = "../relix-testing" }
+jsonwebtoken = { version = "9.3.1", default-features = false }
+rsa = "0.9.10"
+tokio.workspace = true
+wiremock = "0.6.5"
+
+[lints]
+workspace = true
