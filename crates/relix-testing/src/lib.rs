@@ -4,6 +4,7 @@
  */
 
 pub mod integration;
+pub mod mock_document;
 pub mod mock_key_value;
 #[cfg(feature = "ssh")]
 pub mod ssh_server;
