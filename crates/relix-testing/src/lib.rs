@@ -4,3 +4,4 @@
  */
 
 pub mod integration;
+pub mod mock_key_value;

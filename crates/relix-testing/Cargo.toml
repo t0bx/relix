@@ -12,6 +12,7 @@ publish = false
 [dependencies]
 relix-core.workspace = true
 relix-driver-api.workspace = true
+async-trait.workspace = true
 
 [lints]
 workspace = true
