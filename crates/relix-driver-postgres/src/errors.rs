@@ -7,6 +7,8 @@ use relix_driver_api::{DriverError, ErrorKind};
 use std::error::Error as StdError;
 use tokio_postgres::error::{DbError, ErrorPosition};
 
+const CARET_DIAGRAM_HEADER: &str = "source SQL:\n";
+
 pub(crate) fn map_error(error: tokio_postgres::Error) -> DriverError {
     match error.as_db_error() {
         Some(db_error) => map_db_error(db_error),
@@ -17,13 +19,13 @@ pub(crate) fn map_error(error: tokio_postgres::Error) -> DriverError {
 pub(crate) fn map_statement_error(error: tokio_postgres::Error) -> DriverError {
     let position = error
         .as_db_error()
-        .and_then(DbError::position)
-        .and_then(|position| match position {
-            ErrorPosition::Original(position) => Some(*position),
-            ErrorPosition::Internal { .. } => None,
+        .and_then(|db_error| match db_error.position() {
+            Some(ErrorPosition::Original(position)) => zero_based_position(*position),
+            Some(ErrorPosition::Internal { .. }) => None,
+            None => db_error.detail().and_then(caret_position),
         });
     let mapped = map_error(error);
-    match position.and_then(zero_based_position) {
+    match position {
         Some(position) => mapped.with_position(position),
         None => mapped,
     }
@@ -100,6 +102,24 @@ fn zero_based_position(position: u32) -> Option<usize> {
     usize::try_from(position).ok()?.checked_sub(1)
 }
 
+/// Reads the error position from a caret diagram in the detail, which is how
+/// CockroachDB reports syntax errors instead of the protocol's position field:
+/// `source SQL:` followed by the statement up to the failing line and a `^` line.
+fn caret_position(detail: &str) -> Option<usize> {
+    let (_, diagram) = detail.split_once(CARET_DIAGRAM_HEADER)?;
+    let lines: Vec<&str> = diagram.lines().collect();
+    let caret_line = lines.iter().position(|line| line.trim_start() == "^")?;
+    let column = lines[caret_line]
+        .chars()
+        .take_while(|ch| *ch != '^')
+        .count();
+    let preceding: usize = lines[..caret_line.checked_sub(1)?]
+        .iter()
+        .map(|line| line.chars().count() + 1)
+        .sum();
+    Some(preceding + column)
+}
+
 fn source_chain(error: &tokio_postgres::Error) -> Vec<String> {
     let mut causes = Vec::new();
     let mut source = error.source();
@@ -171,5 +191,19 @@ mod tests {
         assert_eq!(zero_based_position(1), Some(0));
         assert_eq!(zero_based_position(15), Some(14));
         assert_eq!(zero_based_position(0), None);
+    }
+
+    #[test]
+    fn caret_diagrams_give_a_zero_based_position() {
+        assert_eq!(
+            caret_position("source SQL:\nSELECT * FORM pg_class\n              ^"),
+            Some(14)
+        );
+        assert_eq!(
+            caret_position("source SQL:\nSELECT 1,\n2 FORM pg_class\n       ^"),
+            Some(17)
+        );
+        assert_eq!(caret_position("Key (id)=(1) already exists."), None);
+        assert_eq!(caret_position("source SQL:\n^"), None);
     }
 }
