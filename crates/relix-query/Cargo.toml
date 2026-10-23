@@ -1,0 +1,25 @@
+[package]
+name = "relix-query"
+description = "SQL lexing, statement splitting, execution coordination and history for RELIX"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+relix-core.workspace = true
+relix-driver-api.workspace = true
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "serde", "std"] }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util = "0.7.20"
+
+[dev-dependencies]
+pretty_assertions.workspace = true
+relix-testing.workspace = true
+
+[lints]
+workspace = true
