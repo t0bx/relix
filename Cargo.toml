@@ -17,6 +17,9 @@ categories = ["command-line-utilities", "database"]
 [workspace.dependencies]
 relix-core = { path = "crates/relix-core" }
 relix-driver-api = { path = "crates/relix-driver-api" }
+relix-config = { path = "crates/relix-config" }
+relix-project = { path = "crates/relix-project" }
+relix-testing = { path = "crates/relix-testing" }
 
 anyhow = "1.0.104"
 async-trait = "0.1.92"

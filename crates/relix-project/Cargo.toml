@@ -1,0 +1,38 @@
+[package]
+name = "relix-project"
+description = "Project, session and credential persistence for RELIX"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+relix-core.workspace = true
+relix-config.workspace = true
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "serde", "std"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+toml = "1.1.8"
+uuid.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6.3", features = ["async-secret-service", "async-io", "crypto-rust"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6.3", features = ["apple-native"] }
+
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "3.6.3", features = ["windows-native"] }
+
+[target.'cfg(not(any(target_os = "linux", target_os = "macos", windows)))'.dependencies]
+keyring = "3.6.3"
+
+[dev-dependencies]
+pretty_assertions.workspace = true
+tempfile = "3.27.0"
+
+[lints]
+workspace = true
