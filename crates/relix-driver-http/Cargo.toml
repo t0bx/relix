@@ -1,0 +1,24 @@
+[package]
+name = "relix-driver-http"
+description = "Shared HTTP transport for RELIX drivers that talk to REST and SQL-over-HTTP APIs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+relix-core.workspace = true
+relix-driver-api.workspace = true
+relix-tls = { path = "../relix-tls" }
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "json", "gzip", "http2", "system-proxy"] }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["net"] }
+
+[lints]
+workspace = true
