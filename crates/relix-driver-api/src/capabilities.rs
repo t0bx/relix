@@ -118,6 +118,10 @@ impl DriverCapabilities {
         )
     }
 
+    pub fn is_key_value(&self) -> bool {
+        self.data_model == DataModel::KeyValue
+    }
+
     pub fn is_document(&self) -> bool {
         matches!(self.data_model, DataModel::Document | DataModel::Search)
     }
