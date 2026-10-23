@@ -243,7 +243,8 @@ impl StatementWriter {
         let quoted = self.builder.dialect.quote_identifier(column);
         match self.builder.dialect {
             Dialect::Postgres => {
-                self.sql.push_str(&format!("{quoted}::text IS NOT DISTINCT FROM "));
+                self.sql
+                    .push_str(&format!("{quoted}::text IS NOT DISTINCT FROM "));
                 self.push_value(value);
             }
             Dialect::MySql => {
@@ -322,7 +323,10 @@ mod tests {
         let builder = SqlBuilder::new(Dialect::MySql, ParamStyle::QuestionMark);
         let table = TableRef::new(Some("shop".into()), None, "orders");
         assert_eq!(builder.qualified_table(&table), "`shop`.`orders`");
-        assert_eq!(builder.count(&table, Some("")), "SELECT COUNT(*) FROM `shop`.`orders`");
+        assert_eq!(
+            builder.count(&table, Some("")),
+            "SELECT COUNT(*) FROM `shop`.`orders`"
+        );
     }
 
     #[test]
@@ -377,9 +381,17 @@ mod tests {
         let builder = SqlBuilder::new(Dialect::MySql, ParamStyle::QuestionMark);
         let table = TableRef::new(Some("shop".into()), None, "orders");
         let insert = builder.insert(&table, &[("total".into(), Value::Int(5))]);
-        assert_eq!(insert.sql, "INSERT INTO `shop`.`orders` (`total`) VALUES (?)");
-        assert_eq!(builder.insert(&table, &[]).sql, "INSERT INTO `shop`.`orders` () VALUES ()");
-        let delete = builder.delete(&table, &[("id".into(), Value::Int(3))]).unwrap();
+        assert_eq!(
+            insert.sql,
+            "INSERT INTO `shop`.`orders` (`total`) VALUES (?)"
+        );
+        assert_eq!(
+            builder.insert(&table, &[]).sql,
+            "INSERT INTO `shop`.`orders` () VALUES ()"
+        );
+        let delete = builder
+            .delete(&table, &[("id".into(), Value::Int(3))])
+            .unwrap();
         assert_eq!(delete.sql, "DELETE FROM `shop`.`orders` WHERE `id` = ?");
     }
 

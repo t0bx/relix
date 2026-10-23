@@ -15,7 +15,9 @@ pub mod timeout;
 pub use async_trait::async_trait;
 pub use capabilities::DriverCapabilities;
 pub use connection::{DatabaseConnection, ServerInfo};
-pub use driver::{ConnectionTarget, DRIVER_API_VERSION, DatabaseDriver, DriverMetadata, DriverOrigin};
+pub use driver::{
+    ConnectionTarget, DRIVER_API_VERSION, DatabaseDriver, DriverMetadata, DriverOrigin,
+};
 pub use error::{DriverError, ErrorKind};
 pub use key_value::KeyValueConnection;
 pub use sql::{ExecuteOptions, SqlConnection, SqlExecutor, SqlIntrospector, TableDataAccess};

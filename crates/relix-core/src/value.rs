@@ -59,7 +59,13 @@ impl Value {
         };
         let single_line: String = raw
             .chars()
-            .map(|ch| if ch == '\n' || ch == '\r' || ch == '\t' { ' ' } else { ch })
+            .map(|ch| {
+                if ch == '\n' || ch == '\r' || ch == '\t' {
+                    ' '
+                } else {
+                    ch
+                }
+            })
             .collect();
         truncate_chars(&single_line, max_chars)
     }
