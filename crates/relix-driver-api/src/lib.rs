@@ -6,6 +6,7 @@
 pub mod capabilities;
 pub mod connection;
 pub mod document;
+pub mod document_rows;
 pub mod driver;
 pub mod error;
 pub mod ipc;
@@ -19,6 +20,7 @@ pub use async_trait::async_trait;
 pub use capabilities::{DatabaseCapability, DriverCapabilities};
 pub use connection::{DatabaseConnection, ServerInfo};
 pub use document::DocumentConnection;
+pub use document_rows::{document_fields, document_rows, json_cell};
 pub use driver::{
     ConnectionProperty, ConnectionTarget, DRIVER_API_VERSION, DatabaseDriver, DependencyStatus,
     DriverMetadata, DriverOrigin,
