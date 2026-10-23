@@ -24,6 +24,7 @@ pub enum DriverOrigin {
 pub enum ConnectionTarget {
     Network { default_port: u16 },
     File,
+    Cloud,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -58,8 +59,18 @@ impl DriverMetadata {
     pub fn default_port(&self) -> Option<u16> {
         match self.target {
             ConnectionTarget::Network { default_port } => Some(default_port),
-            ConnectionTarget::File => None,
+            ConnectionTarget::File | ConnectionTarget::Cloud => None,
         }
+    }
+}
+
+impl ConnectionTarget {
+    pub fn is_network(self) -> bool {
+        matches!(self, Self::Network { .. })
+    }
+
+    pub fn supports_tunnel(self) -> bool {
+        self.is_network()
     }
 }
 

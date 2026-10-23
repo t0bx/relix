@@ -12,7 +12,7 @@
 //! running) and responses may arrive in any order; they are matched by `id`.
 //!
 //! Version 1 of the protocol only covers relational (SQL) connectors: every method maps to
-//! [`crate::SqlIntrospector`], [`crate::SqlExecutor`] or [`crate::TableDataAccess`].
+//! [`crate::SqlIntrospector`], [`crate::QueryExecutor`] or [`crate::TableDataAccess`].
 //! Key-value connectors cannot be implemented as external connectors yet.
 
 use crate::capabilities::DriverCapabilities;

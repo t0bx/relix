@@ -4,13 +4,17 @@
  */
 
 use crate::error::{DriverError, ErrorKind};
-use relix_core::value::hex_string;
+use crate::sql_dialect_rules::{
+    binary_literal, empty_insert_suffix, null_safe_operator, page_clause, qualifiers, typed_literal,
+};
 use relix_core::{CellChange, Dialect, RowChange, TableQuery, TableRef, Value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParamStyle {
     Inline,
     QuestionMark,
+    AtNumbered,
+    ColonNumbered,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -35,18 +39,12 @@ impl SqlBuilder {
     }
 
     pub fn qualified_table(&self, table: &TableRef) -> String {
-        let qualifier = match self.dialect {
-            Dialect::Postgres => table.schema.as_deref(),
-            Dialect::MySql => table.database.as_deref().or(table.schema.as_deref()),
-            Dialect::Sqlite | Dialect::Generic => {
-                table.schema.as_deref().or(table.database.as_deref())
-            }
-        };
-        let name = self.dialect.quote_identifier(&table.name);
-        match qualifier {
-            Some(qualifier) => format!("{}.{name}", self.dialect.quote_identifier(qualifier)),
-            None => name,
-        }
+        qualifiers(self.dialect, table)
+            .into_iter()
+            .chain(std::iter::once(table.name.as_str()))
+            .map(|part| self.dialect.quote_identifier(part))
+            .collect::<Vec<_>>()
+            .join(".")
     }
 
     /// Builds the page query. One row more than `limit` is requested so callers can tell
@@ -61,10 +59,11 @@ impl SqlBuilder {
             sql.push_str(" ORDER BY ");
             sql.push_str(&order.join(", "));
         }
-        sql.push_str(&format!(
-            " LIMIT {} OFFSET {}",
+        sql.push_str(&page_clause(
+            self.dialect,
+            !order.is_empty(),
+            query.offset,
             u64::from(query.limit) + 1,
-            query.offset
         ));
         sql
     }
@@ -119,10 +118,7 @@ impl SqlBuilder {
     pub fn insert(&self, table: &TableRef, values: &[(String, Value)]) -> BuiltStatement {
         let mut writer = self.writer(format!("INSERT INTO {}", self.qualified_table(table)));
         if values.is_empty() {
-            writer.sql.push_str(match self.dialect {
-                Dialect::MySql => " () VALUES ()",
-                _ => " DEFAULT VALUES",
-            });
+            writer.sql.push_str(empty_insert_suffix(self.dialect));
             return writer.finish();
         }
         writer.sql.push_str(" (");
@@ -182,16 +178,17 @@ impl SqlBuilder {
         }
     }
 
-    fn inline_literal(&self, value: &Value) -> String {
+    pub fn inline_literal(&self, value: &Value) -> String {
         match value {
             Value::Null => "NULL".to_owned(),
-            Value::Bytes(bytes) => match self.dialect {
-                Dialect::Postgres => format!("'\\x{}'", &hex_string(bytes)[2..]),
-                _ => format!("X'{}'", &hex_string(bytes)[2..]),
-            },
-            other => self
-                .dialect
-                .quote_literal(&other.to_plain_string().unwrap_or_default()),
+            Value::Bytes(bytes) => binary_literal(self.dialect, bytes),
+            other => typed_literal(self.dialect, other).unwrap_or_else(|| {
+                let text = other.to_plain_string().unwrap_or_default();
+                match self.dialect {
+                    Dialect::MsSql => format!("N{}", self.dialect.quote_literal(&text)),
+                    _ => self.dialect.quote_literal(&text),
+                }
+            }),
         }
     }
 }
@@ -218,6 +215,14 @@ impl StatementWriter {
                 self.sql.push('?');
                 self.params.push(value.clone());
             }
+            ParamStyle::AtNumbered | ParamStyle::ColonNumbered => {
+                self.params.push(value.clone());
+                let prefix = match self.builder.style {
+                    ParamStyle::AtNumbered => "@P",
+                    _ => ":",
+                };
+                self.sql.push_str(&format!("{prefix}{}", self.params.len()));
+            }
         }
     }
 
@@ -243,31 +248,22 @@ impl StatementWriter {
     /// different (e.g. exponent) notation than the client.
     fn push_null_safe_equals(&mut self, column: &str, value: &Value) {
         let quoted = self.builder.dialect.quote_identifier(column);
-        match self.builder.dialect {
-            Dialect::Postgres if value.is_numeric() => {
-                self.sql
-                    .push_str(&format!("{quoted} IS NOT DISTINCT FROM "));
+        let dialect = self.builder.dialect;
+        match null_safe_operator(dialect) {
+            Some(operator) if dialect == Dialect::Postgres && !value.is_numeric() => {
+                self.sql.push_str(&format!("{quoted}::text{operator}"));
                 self.push_value(value);
             }
-            Dialect::Postgres => {
-                self.sql
-                    .push_str(&format!("{quoted}::text IS NOT DISTINCT FROM "));
+            Some(operator) => {
+                self.sql.push_str(&format!("{quoted}{operator}"));
                 self.push_value(value);
             }
-            Dialect::MySql => {
-                self.sql.push_str(&format!("{quoted} <=> "));
-                self.push_value(value);
+            None if value.is_null() => {
+                self.sql.push_str(&format!("{quoted} IS NULL"));
             }
-            Dialect::Sqlite => {
-                self.sql.push_str(&format!("{quoted} IS "));
+            None => {
+                self.sql.push_str(&format!("{quoted} = "));
                 self.push_value(value);
-            }
-            Dialect::Generic => {
-                self.sql.push_str(&format!("({quoted} = "));
-                self.push_value(value);
-                self.sql.push_str(&format!(" OR ({quoted} IS NULL AND "));
-                self.push_value(value);
-                self.sql.push_str(" IS NULL))");
             }
         }
     }
@@ -428,6 +424,40 @@ mod tests {
         let builder = SqlBuilder::new(Dialect::Postgres, ParamStyle::Inline);
         let error = builder.delete(&users(), &[]).unwrap_err();
         assert_eq!(error.kind, ErrorKind::AmbiguousRow);
+    }
+
+    #[test]
+    fn mssql_pages_use_offset_fetch_and_numbered_params() {
+        let builder = SqlBuilder::new(Dialect::MsSql, ParamStyle::AtNumbered);
+        let table = TableRef::new(Some("shop".into()), Some("dbo".into()), "orders");
+        assert_eq!(
+            builder.select_page(&table, &TableQuery::default()),
+            "SELECT * FROM [shop].[dbo].[orders] ORDER BY (SELECT NULL) \
+             OFFSET 0 ROWS FETCH NEXT 201 ROWS ONLY"
+        );
+        let statement = builder
+            .update(
+                &table,
+                &[("id".into(), Value::Int(1))],
+                &[CellChange {
+                    column: "note".into(),
+                    original: Value::Null,
+                    updated: Value::Text("x".into()),
+                }],
+            )
+            .unwrap();
+        assert_eq!(
+            statement.sql,
+            "UPDATE [shop].[dbo].[orders] SET [note] = @P1 WHERE [id] = @P2 AND [note] IS NULL"
+        );
+        assert_eq!(statement.params.len(), 2);
+    }
+
+    #[test]
+    fn mssql_inline_strings_are_unicode_literals() {
+        let builder = SqlBuilder::new(Dialect::MsSql, ParamStyle::Inline);
+        assert_eq!(builder.inline_literal(&Value::Text("ä".into())), "N'ä'");
+        assert_eq!(builder.inline_literal(&Value::Int(3)), "3");
     }
 
     #[test]

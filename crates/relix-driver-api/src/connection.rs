@@ -3,9 +3,10 @@
  * @since 23.10.2026
  */
 
+use crate::document::DocumentConnection;
 use crate::error::DriverError;
 use crate::key_value::KeyValueConnection;
-use crate::sql::SqlConnection;
+use crate::sql::{QueryExecutor, SqlConnection};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
@@ -27,7 +28,15 @@ pub trait DatabaseConnection: Send + Sync {
         None
     }
 
+    fn as_query(&self) -> Option<&dyn QueryExecutor> {
+        self.as_sql().map(|sql| sql as &dyn QueryExecutor)
+    }
+
     fn as_key_value(&self) -> Option<&dyn KeyValueConnection> {
+        None
+    }
+
+    fn as_document(&self) -> Option<&dyn DocumentConnection> {
         None
     }
 }

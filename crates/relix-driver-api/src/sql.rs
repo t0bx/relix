@@ -40,9 +40,10 @@ pub trait SqlIntrospector: Send + Sync {
 }
 
 #[async_trait]
-pub trait SqlExecutor: Send + Sync {
-    /// Executes exactly one statement on the session connection. Session state such as an
-    /// open transaction started with `BEGIN` is preserved between calls.
+pub trait QueryExecutor: Send + Sync {
+    /// Executes exactly one statement, written in the data source's query language, on
+    /// the session connection. Session state such as an open transaction started with
+    /// `BEGIN` is preserved between calls.
     async fn execute(
         &self,
         statement: &str,
@@ -67,6 +68,6 @@ pub trait TableDataAccess: Send + Sync {
     async fn apply_changes(&self, changes: &ChangeSet) -> Result<ChangeReport, DriverError>;
 }
 
-pub trait SqlConnection: SqlIntrospector + SqlExecutor + TableDataAccess {}
+pub trait SqlConnection: SqlIntrospector + QueryExecutor + TableDataAccess {}
 
-impl<T: SqlIntrospector + SqlExecutor + TableDataAccess> SqlConnection for T {}
+impl<T: SqlIntrospector + QueryExecutor + TableDataAccess> SqlConnection for T {}
