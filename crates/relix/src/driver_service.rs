@@ -36,10 +36,16 @@ impl ManagerDriverService {
 
 /// Built-in engines in the order users expect them; external connectors follow.
 fn display_rank(id: &DriverId) -> usize {
-    [DriverId::POSTGRES, DriverId::MYSQL, DriverId::MARIADB, DriverId::SQLITE, DriverId::REDIS]
-        .iter()
-        .position(|known| *known == id.as_str())
-        .unwrap_or(usize::MAX)
+    [
+        DriverId::POSTGRES,
+        DriverId::MYSQL,
+        DriverId::MARIADB,
+        DriverId::SQLITE,
+        DriverId::REDIS,
+    ]
+    .iter()
+    .position(|known| *known == id.as_str())
+    .unwrap_or(usize::MAX)
 }
 
 fn describe_offer(offer: &PackageOffer) -> InstallOffer {
@@ -86,7 +92,8 @@ impl DriverService for ManagerDriverService {
                 Some(descriptor)
             })
             .collect();
-        descriptors.sort_by_key(|descriptor| (display_rank(&descriptor.id), descriptor.name.clone()));
+        descriptors
+            .sort_by_key(|descriptor| (display_rank(&descriptor.id), descriptor.name.clone()));
         descriptors
     }
 
