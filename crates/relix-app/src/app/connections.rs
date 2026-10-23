@@ -274,6 +274,31 @@ impl App {
         }
     }
 
+    /// Marks a connection as lost when an operation fails at the transport level, so the
+    /// UI stops pretending it is connected and the next action reconnects. Statements are
+    /// never retried automatically because their outcome is unknown.
+    pub(crate) fn note_driver_error(&mut self, source: DataSourceId, error: &DriverError) {
+        if !error.kind.is_connection_loss() {
+            return;
+        }
+        let name = self
+            .data_source(source)
+            .map(|definition| definition.name.clone())
+            .unwrap_or_default();
+        if let Some(state) = self.connections.get_mut(&source) {
+            state.status = ConnectionStatus::Failed("connection lost".into());
+            if let Some(handle) = state.handle.take() {
+                self.context.runtime.spawn(async move {
+                    let _ = handle.close().await;
+                });
+            }
+        }
+        self.notify(
+            Level::Warning,
+            format!("connection to {name} was lost — it reconnects on the next action"),
+        );
+    }
+
     pub(crate) fn disconnect(&mut self, source: DataSourceId) {
         if let Some(state) = self.connections.remove(&source)
             && let Some(handle) = state.handle

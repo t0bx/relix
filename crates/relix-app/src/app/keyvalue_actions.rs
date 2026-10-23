@@ -720,7 +720,7 @@ impl App {
             })));
     }
 
-    pub(crate) fn save_key_value_edit(&mut self, action: TextEditAction, text: String) {
+    pub(crate) fn save_text_edit(&mut self, action: TextEditAction, text: String) {
         match action {
             TextEditAction::RedisString { tab, key } => {
                 let ttl = self
@@ -741,7 +741,9 @@ impl App {
                 );
             }
             TextEditAction::RedisElement { tab } => self.save_element_edit(tab, text),
-            TextEditAction::GridCell { .. } => {}
+            TextEditAction::GridCell { tab, row, column } => {
+                self.stage_cell_text(tab, row, column, text)
+            }
         }
     }
 

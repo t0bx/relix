@@ -252,8 +252,12 @@ impl App {
                 self.resume_explorer_expansions();
             }
             Err(error) => {
+                let source = self.explorer.node(id).and_then(|node| node.kind.source());
                 self.explorer.set_failed(id, error.to_string());
                 self.notify(Level::Error, error.to_string());
+                if let Some(source) = source {
+                    self.note_driver_error(source, &error);
+                }
             }
         }
     }

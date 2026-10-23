@@ -433,7 +433,11 @@ impl App {
         };
         let request = self.next_request();
         let cancel = CancellationToken::new();
-        let row_limit = self.settings.query.row_limit;
+        let row_limit = self
+            .project
+            .as_ref()
+            .and_then(|project| project.settings.row_limit)
+            .unwrap_or(self.settings.query.row_limit);
         let timeout = (self.settings.query.timeout_secs > 0)
             .then(|| Duration::from_secs(self.settings.query.timeout_secs));
         let offsets: Vec<usize> = statements.iter().map(|(_, offset)| *offset).collect();
@@ -591,7 +595,16 @@ impl App {
             elapsed: report.elapsed,
             request: None,
         });
+        let lost_connection = report
+            .result
+            .as_ref()
+            .err()
+            .filter(|error| error.kind.is_connection_loss())
+            .cloned();
         self.status = format!("{summary} · {} ms", report.elapsed.as_millis());
+        if let (Some(error), Some(source)) = (lost_connection, source) {
+            self.note_driver_error(source, &error);
+        }
         self.record_history(HistoryEntry {
             sql: report.statement,
             data_source: source,

@@ -203,9 +203,18 @@ impl ViewerState {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TextEditAction {
-    RedisString { tab: TabId, key: KeyName },
-    RedisElement { tab: TabId },
-    GridCell { tab: TabId },
+    RedisString {
+        tab: TabId,
+        key: KeyName,
+    },
+    RedisElement {
+        tab: TabId,
+    },
+    GridCell {
+        tab: TabId,
+        row: usize,
+        column: usize,
+    },
 }
 
 #[derive(Debug, Clone)]

@@ -366,6 +366,17 @@ impl GridState {
         );
     }
 
+    pub fn set_cell(&mut self, row: usize, column: usize, value: Value) -> Result<(), String> {
+        if let Editability::ReadOnly(reason) = &self.editability {
+            return Err(reason.clone());
+        }
+        if self.rows.get(row).is_none_or(|row| row.deleted) {
+            return Err("row is no longer editable".into());
+        }
+        self.stage_value(row, column, value);
+        Ok(())
+    }
+
     pub fn set_null(&mut self) -> Result<(), String> {
         if let Editability::ReadOnly(reason) = &self.editability {
             return Err(reason.clone());

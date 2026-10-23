@@ -153,10 +153,15 @@ async fn sqlite_end_to_end_browse_query_edit_and_commit() {
         "sorted descending"
     );
 
-    harness.keys("e");
-    harness.keys("ctrl+u");
+    harness.keys("alt+e");
+    assert!(matches!(
+        harness.app.overlays.last(),
+        Some(Overlay::TextEdit(_))
+    ));
+    harness.keys("ctrl+a");
+    harness.key(KeyChord::plain(KeyCode::Backspace));
     harness.type_text("cyrus");
-    harness.key(KeyChord::plain(KeyCode::Enter));
+    harness.keys("ctrl+s");
     harness.keys("ctrl+s");
     assert!(
         matches!(harness.app.overlays.last(), Some(Overlay::Confirm(_))),

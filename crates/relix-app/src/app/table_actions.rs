@@ -13,7 +13,7 @@ use crate::loaders;
 use crate::notifications::Level;
 use crate::overlay::{
     ConfirmState, Overlay, PendingAction, PickerItem, PickerPurpose, PickerState, PickerValue,
-    SortEditorState,
+    SortEditorState, TextEditAction, TextEditState,
 };
 use crate::requests::RequestId;
 use crate::tab::Tab;
@@ -24,6 +24,7 @@ use relix_core::{
     ChangeReport, DataSourceId, ObjectKind, RowBatch, TableDetails, TableQuery, TableRef, Value,
 };
 use relix_driver_api::DriverError;
+use relix_editor::TextBuffer;
 use relix_editor::{CatalogTable, CompletionCatalog, CompletionItem, CompletionKind, complete};
 use relix_project::SplitDirection;
 use relix_query::RecentList;
@@ -188,7 +189,9 @@ impl App {
             }
             Err(error) => {
                 table.error = Some(error.to_string());
+                let source = table.data_source;
                 self.notify(Level::Error, error.to_string());
+                self.note_driver_error(source, &error);
             }
         }
     }
@@ -255,6 +258,7 @@ impl App {
             | Command::RevertChange => {
                 self.edit_table_grid(tab, command);
             }
+            Command::EditCellInPopup => self.edit_cell_in_popup(tab),
             _ => {}
         }
     }
@@ -278,6 +282,42 @@ impl App {
             _ => Ok(()),
         };
         if let Err(reason) = result {
+            self.notify(Level::Warning, reason);
+        }
+    }
+
+    fn edit_cell_in_popup(&mut self, tab: TabId) {
+        let Some(grid) = self.table_tab(tab).and_then(|table| table.grid.as_ref()) else {
+            return;
+        };
+        if let Editability::ReadOnly(reason) = &grid.editability {
+            let reason = reason.clone();
+            self.notify(Level::Warning, reason);
+            return;
+        }
+        let (row, column) = (grid.cursor_row, grid.cursor_column);
+        let text = grid
+            .current_value()
+            .and_then(Value::to_plain_string)
+            .unwrap_or_default();
+        let title = grid.current_column().map_or_else(
+            || "cell".to_owned(),
+            |column| format!("Edit {}", column.meta.name),
+        );
+        self.overlays
+            .push(Overlay::TextEdit(Box::new(TextEditState {
+                title,
+                buffer: TextBuffer::from_text(&text),
+                scroll: 0,
+                action: TextEditAction::GridCell { tab, row, column },
+            })));
+    }
+
+    pub(crate) fn stage_cell_text(&mut self, tab: TabId, row: usize, column: usize, text: String) {
+        let Some(grid) = self.table_tab(tab).and_then(|table| table.grid.as_mut()) else {
+            return;
+        };
+        if let Err(reason) = grid.set_cell(row, column, Value::Text(text)) {
             self.notify(Level::Warning, reason);
         }
     }

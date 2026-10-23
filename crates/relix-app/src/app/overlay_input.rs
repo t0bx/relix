@@ -195,7 +195,7 @@ impl App {
             KeyCode::Esc => None,
             KeyCode::Char('s') if chord.modifiers.ctrl => {
                 let text = edit.buffer.text();
-                self.save_key_value_edit(edit.action, text);
+                self.save_text_edit(edit.action, text);
                 None
             }
             KeyCode::Char('z') if chord.modifiers.ctrl => {

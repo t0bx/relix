@@ -93,6 +93,7 @@ pub enum Command {
     ExtendSelectionUp,
     ExtendSelectionDown,
     EditCell,
+    EditCellInPopup,
     SetNull,
     InsertRow,
     DeleteRows,
@@ -815,6 +816,13 @@ pub static COMMANDS: &[CommandSpec] = &[
         "Edit cell",
         K::Grid,
         &["enter", "e", "f2"],
+    ),
+    spec(
+        C::EditCellInPopup,
+        "grid.edit_popup",
+        "Edit cell in multi-line editor",
+        K::Grid,
+        &["alt+e"],
     ),
     spec(
         C::SetNull,
