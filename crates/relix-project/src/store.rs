@@ -149,13 +149,17 @@ impl ProjectStore {
         Ok(())
     }
 
+    pub fn script_path(&self, id: ProjectId, file_name: &str) -> Result<PathBuf, ProjectError> {
+        Ok(self.scripts_dir(id).join(script_file_name(file_name)?))
+    }
+
     pub fn save_script(
         &self,
         id: ProjectId,
         file_name: &str,
         text: &str,
     ) -> Result<PathBuf, ProjectError> {
-        let path = self.scripts_dir(id).join(script_file_name(file_name)?);
+        let path = self.script_path(id, file_name)?;
         write_atomic(&path, text.as_bytes())?;
         Ok(path)
     }
