@@ -3,13 +3,15 @@
  * @since 23.10.2026
  */
 
-use crate::input::LineInput;
+use crate::form::{FieldValue, FormCommand, FormField, FormRow, FormState, FormStatus, FormView};
 use crate::services::DriverDescriptor;
+use relix_config::KeyChord;
 use relix_core::{
-    ConnectionSettings, DataSourceDefinition, DataSourceId, DriverId, Environment, Secret, TlsMode,
-    TlsSettings,
+    ConnectionSettings, DataSourceDefinition, DataSourceId, DriverId, Environment, NetworkMode,
+    NetworkSettings, Secret, ServerConfigId, TlsMode, TlsSettings,
 };
 use relix_driver_api::ConnectionTarget;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,75 +25,105 @@ pub enum FieldId {
     Database,
     FilePath,
     CreateIfMissing,
-    Timeout,
     TlsMode,
     CaCertificate,
+    NetworkMode,
+    SshConfig,
+    VpnProfile,
+    LocalPort,
+    Timeout,
+    QueryTimeout,
+    Properties,
     Environment,
     Color,
     SavePassword,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FieldValue {
-    Text(LineInput),
-    Secret(LineInput),
-    Choice {
-        options: Vec<String>,
-        selected: usize,
-    },
-    Toggle(bool),
+pub struct ServerChoice {
+    pub id: ServerConfigId,
+    pub label: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FormField {
-    pub id: FieldId,
-    pub label: &'static str,
-    pub value: FieldValue,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FormStatus {
-    pub message: String,
-    pub success: bool,
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ServerChoices {
+    pub ssh: Vec<ServerChoice>,
+    pub vpn: Vec<ServerChoice>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataSourceForm {
     pub editing: Option<DataSourceId>,
-    pub fields: Vec<FormField>,
-    pub focused: usize,
+    pub form: FormState<FieldId>,
     pub drivers: Vec<DriverDescriptor>,
-    pub status: Option<FormStatus>,
-    pub testing: bool,
-    pub password_touched: bool,
+    servers: ServerChoices,
+    ssh_ids: Vec<Option<ServerConfigId>>,
+    vpn_ids: Vec<Option<ServerConfigId>>,
 }
 
-fn text(id: FieldId, label: &'static str, value: &str) -> FormField {
-    FormField {
-        id,
-        label,
-        value: FieldValue::Text(LineInput::with_text(value)),
+fn server_field(
+    id: FieldId,
+    label: &'static str,
+    choices: &[ServerChoice],
+    current: Option<ServerConfigId>,
+) -> (FormField<FieldId>, Vec<Option<ServerConfigId>>) {
+    let mut options: Vec<String> = choices.iter().map(|choice| choice.label.clone()).collect();
+    let mut ids: Vec<Option<ServerConfigId>> =
+        choices.iter().map(|choice| Some(choice.id)).collect();
+    if let Some(current) = current
+        && !ids.contains(&Some(current))
+    {
+        options.push("(deleted configuration)".into());
+        ids.push(None);
     }
+    if options.is_empty() {
+        options.push("(none — create one in Server configurations)".into());
+        ids.push(None);
+    }
+    let selected = current
+        .and_then(|current| ids.iter().position(|id| *id == Some(current)))
+        .or_else(|| {
+            ids.iter()
+                .position(Option::is_none)
+                .filter(|_| current.is_some())
+        })
+        .unwrap_or(0);
+    (FormField::choice(id, label, options, selected), ids)
 }
 
-fn choice(id: FieldId, label: &'static str, options: Vec<String>, selected: usize) -> FormField {
-    FormField {
-        id,
-        label,
-        value: FieldValue::Choice { options, selected },
-    }
+fn properties_text(properties: &BTreeMap<String, String>) -> String {
+    properties
+        .iter()
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
-fn toggle(id: FieldId, label: &'static str, value: bool) -> FormField {
-    FormField {
-        id,
-        label,
-        value: FieldValue::Toggle(value),
+pub fn parse_properties(text: &str) -> Result<BTreeMap<String, String>, String> {
+    let mut properties = BTreeMap::new();
+    for entry in text
+        .split(';')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+    {
+        let (key, value) = entry
+            .split_once('=')
+            .ok_or_else(|| format!("property '{entry}' must look like key=value"))?;
+        let key = key.trim();
+        if key.is_empty() {
+            return Err(format!("property '{entry}' has no name"));
+        }
+        properties.insert(key.to_owned(), value.trim().to_owned());
     }
+    Ok(properties)
 }
 
 impl DataSourceForm {
-    pub fn new(drivers: Vec<DriverDescriptor>, existing: Option<&DataSourceDefinition>) -> Self {
+    pub fn new(
+        drivers: Vec<DriverDescriptor>,
+        existing: Option<&DataSourceDefinition>,
+        servers: ServerChoices,
+    ) -> Self {
         let definition = existing.cloned().unwrap_or_else(|| {
             let driver = drivers.first().map_or_else(
                 || DriverId::new(DriverId::POSTGRES),
@@ -104,56 +136,62 @@ impl DataSourceForm {
             .iter()
             .position(|driver| driver.id == definition.driver)
             .unwrap_or(0);
-        let tls_index = TlsMode::ALL
-            .iter()
-            .position(|mode| *mode == settings.tls.mode)
-            .unwrap_or(0);
-        let environment_index = Environment::ALL
-            .iter()
-            .position(|environment| *environment == definition.environment)
-            .unwrap_or(0);
+        let index_of = |list: &[TlsMode], mode: TlsMode| {
+            list.iter().position(|item| *item == mode).unwrap_or(0)
+        };
+        let port = settings
+            .port
+            .or_else(|| {
+                drivers
+                    .get(driver_index)
+                    .and_then(|driver| driver.default_port)
+            })
+            .map(|port| port.to_string())
+            .unwrap_or_default();
+        let (ssh_field, ssh_ids) = server_field(
+            FieldId::SshConfig,
+            "SSH config",
+            &servers.ssh,
+            definition.network.ssh,
+        );
+        let (vpn_field, vpn_ids) = server_field(
+            FieldId::VpnProfile,
+            "VPN profile",
+            &servers.vpn,
+            definition.network.vpn,
+        );
+        let labels = |items: &[&'static str]| {
+            items
+                .iter()
+                .map(|item| (*item).to_owned())
+                .collect::<Vec<_>>()
+        };
         let fields = vec![
-            text(FieldId::Name, "Name", &definition.name),
-            choice(
+            FormField::text(FieldId::Name, "Name", &definition.name),
+            FormField::choice(
                 FieldId::Driver,
                 "Engine",
                 drivers.iter().map(|driver| driver.name.clone()).collect(),
                 driver_index,
             ),
-            text(
+            FormField::text(
                 FieldId::Host,
                 "Host",
                 settings.host.as_deref().unwrap_or("localhost"),
             ),
-            text(
-                FieldId::Port,
-                "Port",
-                &settings
-                    .port
-                    .or_else(|| {
-                        drivers
-                            .get(driver_index)
-                            .and_then(|driver| driver.default_port)
-                    })
-                    .map(|port| port.to_string())
-                    .unwrap_or_default(),
-            ),
-            text(
+            FormField::text(FieldId::Port, "Port", &port),
+            FormField::text(
                 FieldId::Username,
                 "User",
                 settings.username.as_deref().unwrap_or_default(),
             ),
-            FormField {
-                id: FieldId::Password,
-                label: "Password",
-                value: FieldValue::Secret(LineInput::default()),
-            },
-            text(
+            FormField::secret(FieldId::Password, "Password"),
+            FormField::text(
                 FieldId::Database,
                 "Database",
                 settings.database.as_deref().unwrap_or_default(),
             ),
-            text(
+            FormField::text(
                 FieldId::FilePath,
                 "File",
                 &settings
@@ -162,26 +200,21 @@ impl DataSourceForm {
                     .map(|path| path.display().to_string())
                     .unwrap_or_default(),
             ),
-            toggle(
+            FormField::toggle(
                 FieldId::CreateIfMissing,
                 "Create file",
                 settings.create_if_missing,
             ),
-            text(
-                FieldId::Timeout,
-                "Timeout (s)",
-                &settings.connect_timeout_secs.to_string(),
-            ),
-            choice(
+            FormField::choice(
                 FieldId::TlsMode,
                 "TLS",
                 TlsMode::ALL
                     .iter()
                     .map(|mode| mode.label().to_owned())
                     .collect(),
-                tls_index,
+                index_of(&TlsMode::ALL, settings.tls.mode),
             ),
-            text(
+            FormField::text(
                 FieldId::CaCertificate,
                 "CA cert",
                 &settings
@@ -191,21 +224,62 @@ impl DataSourceForm {
                     .map(|path| path.display().to_string())
                     .unwrap_or_default(),
             ),
-            choice(
+            FormField::choice(
+                FieldId::NetworkMode,
+                "Network",
+                labels(&NetworkMode::ALL.map(NetworkMode::label)),
+                NetworkMode::ALL
+                    .iter()
+                    .position(|mode| *mode == definition.network.mode)
+                    .unwrap_or(0),
+            ),
+            ssh_field,
+            vpn_field,
+            FormField::text(
+                FieldId::LocalPort,
+                "Local port",
+                &definition
+                    .network
+                    .local_port
+                    .map(|port| port.to_string())
+                    .unwrap_or_default(),
+            ),
+            FormField::text(
+                FieldId::Timeout,
+                "Timeout (s)",
+                &settings.connect_timeout_secs.to_string(),
+            ),
+            FormField::text(
+                FieldId::QueryTimeout,
+                "Query timeout",
+                &settings
+                    .query_timeout_secs
+                    .map(|seconds| seconds.to_string())
+                    .unwrap_or_default(),
+            ),
+            FormField::text(
+                FieldId::Properties,
+                "Properties",
+                &properties_text(&settings.properties),
+            ),
+            FormField::choice(
                 FieldId::Environment,
                 "Environment",
                 Environment::ALL
                     .iter()
                     .map(|environment| environment.label().to_owned())
                     .collect(),
-                environment_index,
+                Environment::ALL
+                    .iter()
+                    .position(|environment| *environment == definition.environment)
+                    .unwrap_or(0),
             ),
-            text(
+            FormField::text(
                 FieldId::Color,
                 "Color",
                 definition.color.as_deref().unwrap_or_default(),
             ),
-            toggle(
+            FormField::toggle(
                 FieldId::SavePassword,
                 "Save password",
                 settings.save_password,
@@ -213,140 +287,109 @@ impl DataSourceForm {
         ];
         Self {
             editing: existing.map(|definition| definition.id),
-            fields,
-            focused: 0,
+            form: FormState::new(fields),
             drivers,
-            status: None,
-            testing: false,
-            password_touched: false,
+            servers,
+            ssh_ids,
+            vpn_ids,
         }
     }
 
     pub fn selected_driver(&self) -> Option<&DriverDescriptor> {
-        let index = match self.field(FieldId::Driver).map(|field| &field.value) {
-            Some(FieldValue::Choice { selected, .. }) => *selected,
-            _ => 0,
-        };
-        self.drivers.get(index)
+        self.drivers.get(self.form.choice(FieldId::Driver))
     }
 
-    fn is_file_based(&self) -> bool {
+    fn target(&self) -> ConnectionTarget {
         self.selected_driver()
-            .is_some_and(|driver| driver.target == ConnectionTarget::File)
+            .map_or(ConnectionTarget::Network { default_port: 0 }, |driver| {
+                driver.target
+            })
     }
 
-    /// Fields relevant for the selected engine; file based engines hide network settings.
+    fn network_mode(&self) -> NetworkMode {
+        NetworkMode::ALL[self
+            .form
+            .choice(FieldId::NetworkMode)
+            .min(NetworkMode::ALL.len() - 1)]
+    }
+
     pub fn is_visible(&self, id: FieldId) -> bool {
-        let file = self.is_file_based();
+        let target = self.target();
+        let file = target == ConnectionTarget::File;
+        let network = target.is_network();
+        let mode = self.network_mode();
         match id {
-            FieldId::Host
-            | FieldId::Port
-            | FieldId::Username
+            FieldId::Host | FieldId::Port => network,
+            FieldId::Username
             | FieldId::Password
             | FieldId::TlsMode
             | FieldId::CaCertificate
-            | FieldId::SavePassword => !file,
+            | FieldId::SavePassword
+            | FieldId::NetworkMode => !file,
+            FieldId::SshConfig | FieldId::LocalPort => !file && mode.uses_ssh(),
+            FieldId::VpnProfile => !file && mode.uses_vpn(),
             FieldId::FilePath | FieldId::CreateIfMissing => file,
             _ => true,
         }
     }
 
-    pub fn visible_indexes(&self) -> Vec<usize> {
-        self.fields
-            .iter()
-            .enumerate()
-            .filter(|(_, field)| self.is_visible(field.id))
-            .map(|(index, _)| index)
-            .collect()
-    }
-
-    pub fn move_focus(&mut self, delta: isize) {
-        let visible = self.visible_indexes();
-        let position = visible
-            .iter()
-            .position(|index| *index == self.focused)
-            .unwrap_or(0);
-        let count = visible.len() as isize;
-        let next = (position as isize + delta).rem_euclid(count.max(1)) as usize;
-        self.focused = visible.get(next).copied().unwrap_or(0);
-    }
-
-    pub fn focused_field_mut(&mut self) -> Option<&mut FormField> {
-        self.fields.get_mut(self.focused)
-    }
-
-    pub fn field(&self, id: FieldId) -> Option<&FormField> {
-        self.fields.iter().find(|field| field.id == id)
-    }
-
-    fn field_mut(&mut self, id: FieldId) -> Option<&mut FormField> {
-        self.fields.iter_mut().find(|field| field.id == id)
-    }
-
-    fn text_of(&self, id: FieldId) -> String {
-        match self.field(id).map(|field| &field.value) {
-            Some(FieldValue::Text(input) | FieldValue::Secret(input)) => {
-                input.text().trim().to_owned()
-            }
-            _ => String::new(),
-        }
-    }
-
-    fn choice_of(&self, id: FieldId) -> usize {
-        match self.field(id).map(|field| &field.value) {
-            Some(FieldValue::Choice { selected, .. }) => *selected,
-            _ => 0,
-        }
-    }
-
-    fn toggle_of(&self, id: FieldId) -> bool {
-        matches!(
-            self.field(id).map(|field| &field.value),
-            Some(FieldValue::Toggle(true))
-        )
-    }
-
-    /// Cycles a choice field. Switching the engine fills in its default port when the port
-    /// is empty or still the previous engine's default.
-    pub fn cycle_choice(&mut self, delta: isize) {
+    pub fn handle_key(&mut self, chord: KeyChord) -> FormCommand<FieldId> {
         let previous_port = self
             .selected_driver()
             .and_then(|driver| driver.default_port);
-        let focused_id = self.fields.get(self.focused).map(|field| field.id);
-        if let Some(FormField {
-            value: FieldValue::Choice { options, selected },
-            ..
-        }) = self.fields.get_mut(self.focused)
-            && !options.is_empty()
-        {
-            let count = options.len() as isize;
-            *selected = (*selected as isize + delta).rem_euclid(count) as usize;
+        let visible: Vec<FieldId> = self
+            .form
+            .fields
+            .iter()
+            .map(|field| field.id)
+            .filter(|id| self.is_visible(*id))
+            .collect();
+        let command = self.form.handle_key(chord, |id| visible.contains(&id));
+        if command == FormCommand::Edited(FieldId::Driver) {
+            self.apply_default_port(previous_port);
         }
-        if focused_id == Some(FieldId::Driver) {
-            let current_port = self.text_of(FieldId::Port);
-            let new_port = self
-                .selected_driver()
-                .and_then(|driver| driver.default_port);
-            let replace = current_port.is_empty()
-                || previous_port.map(|port| port.to_string()) == Some(current_port);
-            if replace
-                && let Some(FormField {
-                    value: FieldValue::Text(input),
-                    ..
-                }) = self.field_mut(FieldId::Port)
-            {
-                input.set(&new_port.map(|port| port.to_string()).unwrap_or_default());
-            }
+        command
+    }
+
+    fn apply_default_port(&mut self, previous_port: Option<u16>) {
+        let current = self.form.text(FieldId::Port);
+        let new_port = self
+            .selected_driver()
+            .and_then(|driver| driver.default_port);
+        let replace =
+            current.is_empty() || previous_port.map(|port| port.to_string()) == Some(current);
+        if replace {
+            self.form.set_text(
+                FieldId::Port,
+                &new_port.map(|port| port.to_string()).unwrap_or_default(),
+            );
         }
     }
 
-    pub fn toggle_focused(&mut self) {
-        if let Some(FormField {
-            value: FieldValue::Toggle(value),
-            ..
-        }) = self.fields.get_mut(self.focused)
-        {
-            *value = !*value;
+    pub fn set_status(&mut self, status: FormStatus, busy: bool) {
+        self.form.status = Some(status);
+        self.form.busy = busy;
+    }
+
+    fn selected_server(
+        &self,
+        field: FieldId,
+        ids: &[Option<ServerConfigId>],
+        kind: &str,
+    ) -> Result<ServerConfigId, String> {
+        ids.get(self.form.choice(field))
+            .copied()
+            .flatten()
+            .ok_or_else(|| format!("select an existing {kind} configuration"))
+    }
+
+    fn parse_port(&self, id: FieldId) -> Result<Option<u16>, String> {
+        match self.form.optional(id) {
+            Some(port) => port
+                .parse::<u16>()
+                .map(Some)
+                .map_err(|_| format!("invalid port '{port}'")),
+            None => Ok(None),
         }
     }
 
@@ -356,70 +399,175 @@ impl DataSourceForm {
         let driver = self
             .selected_driver()
             .ok_or("no database engine available")?;
-        let name = self.text_of(FieldId::Name);
+        let name = self.form.text(FieldId::Name);
         if name.is_empty() {
             return Err("name is required".into());
         }
-        let optional = |id| Some(self.text_of(id)).filter(|value| !value.is_empty());
-        let port = match optional(FieldId::Port) {
-            Some(port) => Some(
-                port.parse::<u16>()
-                    .map_err(|_| format!("invalid port '{port}'"))?,
-            ),
-            None => driver.default_port,
-        };
+        let target = driver.target;
+        let file_based = target == ConnectionTarget::File;
+        let networked = target.is_network();
+        let port = self.parse_port(FieldId::Port)?.or(driver.default_port);
         let timeout = self
-            .text_of(FieldId::Timeout)
+            .form
+            .text(FieldId::Timeout)
             .parse::<u64>()
             .map_err(|_| "timeout must be a number of seconds".to_owned())?;
-        let file_based = driver.target == ConnectionTarget::File;
-        let file_path = optional(FieldId::FilePath).map(PathBuf::from);
+        let query_timeout = match self.form.optional(FieldId::QueryTimeout) {
+            Some(value) => Some(
+                value
+                    .parse::<u64>()
+                    .map_err(|_| "query timeout must be a number of seconds".to_owned())?,
+            ),
+            None => None,
+        };
+        let file_path = self.form.optional(FieldId::FilePath).map(PathBuf::from);
         if file_based && file_path.is_none() {
             return Err("a database file is required".into());
         }
-        let color = optional(FieldId::Color);
+        let color = self.form.optional(FieldId::Color);
         if let Some(color) = &color
             && color.parse::<relix_config::ColorSpec>().is_err()
         {
             return Err(format!("invalid color '{color}'"));
         }
+        let mode = if file_based {
+            NetworkMode::Direct
+        } else {
+            self.network_mode()
+        };
+        if mode.uses_ssh() && !target.supports_tunnel() {
+            return Err(format!(
+                "{} talks to cloud APIs; SSH tunnels cannot carry it (use direct or VPN)",
+                driver.name
+            ));
+        }
+        let network = NetworkSettings {
+            mode,
+            ssh: if mode.uses_ssh() {
+                Some(self.selected_server(FieldId::SshConfig, &self.ssh_ids, "SSH")?)
+            } else {
+                None
+            },
+            vpn: if mode.uses_vpn() {
+                Some(self.selected_server(FieldId::VpnProfile, &self.vpn_ids, "VPN")?)
+            } else {
+                None
+            },
+            local_port: if mode.uses_ssh() {
+                self.parse_port(FieldId::LocalPort)?
+            } else {
+                None
+            },
+        };
         let settings = ConnectionSettings {
-            host: (!file_based).then(|| optional(FieldId::Host)).flatten(),
-            port: (!file_based).then_some(port).flatten(),
-            username: (!file_based).then(|| optional(FieldId::Username)).flatten(),
-            database: optional(FieldId::Database),
+            host: networked
+                .then(|| self.form.optional(FieldId::Host))
+                .flatten(),
+            port: networked.then_some(port).flatten(),
+            username: (!file_based)
+                .then(|| self.form.optional(FieldId::Username))
+                .flatten(),
+            database: self.form.optional(FieldId::Database),
             file_path: file_based.then_some(file_path).flatten(),
-            create_if_missing: file_based && self.toggle_of(FieldId::CreateIfMissing),
+            create_if_missing: file_based && self.form.toggle(FieldId::CreateIfMissing),
             connect_timeout_secs: timeout.clamp(1, 600),
             tls: TlsSettings {
-                mode: TlsMode::ALL[self.choice_of(FieldId::TlsMode).min(TlsMode::ALL.len() - 1)],
-                ca_certificate: optional(FieldId::CaCertificate).map(PathBuf::from),
+                mode: TlsMode::ALL[self
+                    .form
+                    .choice(FieldId::TlsMode)
+                    .min(TlsMode::ALL.len() - 1)],
+                ca_certificate: self
+                    .form
+                    .optional(FieldId::CaCertificate)
+                    .map(PathBuf::from),
             },
-            save_password: self.toggle_of(FieldId::SavePassword),
-            ..ConnectionSettings::default()
+            save_password: self.form.toggle(FieldId::SavePassword),
+            query_timeout_secs: query_timeout.filter(|seconds| *seconds > 0),
+            properties: parse_properties(&self.form.text(FieldId::Properties))?,
         };
         let definition = DataSourceDefinition {
             id: self.editing.unwrap_or_default(),
             name,
             driver: driver.id.clone(),
             environment: Environment::ALL[self
-                .choice_of(FieldId::Environment)
+                .form
+                .choice(FieldId::Environment)
                 .min(Environment::ALL.len() - 1)],
             color,
             settings,
-            network: Default::default(),
+            network,
         };
-        let password = (self.password_touched || self.editing.is_none())
-            .then(|| self.text_of(FieldId::Password))
+        let password = (self.form.is_touched(FieldId::Password) || self.editing.is_none())
+            .then(|| self.form.text(FieldId::Password))
             .filter(|password| !password.is_empty())
             .map(Secret::new);
         Ok((definition, password))
+    }
+
+    pub fn servers(&self) -> &ServerChoices {
+        &self.servers
+    }
+}
+
+impl FormView for DataSourceForm {
+    fn title(&self) -> String {
+        if self.editing.is_some() {
+            "Edit data source".into()
+        } else {
+            "New data source".into()
+        }
+    }
+
+    fn rows(&self) -> Vec<FormRow<'_>> {
+        self.form
+            .fields
+            .iter()
+            .enumerate()
+            .filter(|(_, field)| self.is_visible(field.id))
+            .map(|(index, field)| FormRow {
+                label: field.label,
+                value: &field.value,
+                focused: index == self.form.focused,
+                placeholder: match (&field.value, field.id) {
+                    (FieldValue::Secret(input), FieldId::Password)
+                        if input.is_empty()
+                            && self.editing.is_some()
+                            && !self.form.is_touched(FieldId::Password) =>
+                    {
+                        Some("(unchanged)")
+                    }
+                    (FieldValue::Text(input), FieldId::Properties) if input.is_empty() => {
+                        Some("key=value; key=value")
+                    }
+                    (FieldValue::Text(input), FieldId::LocalPort) if input.is_empty() => {
+                        Some("automatic")
+                    }
+                    (FieldValue::Text(input), FieldId::QueryTimeout) if input.is_empty() => {
+                        Some("none")
+                    }
+                    _ => None,
+                },
+            })
+            .collect()
+    }
+
+    fn status(&self) -> Option<&FormStatus> {
+        self.form.status.as_ref()
+    }
+
+    fn busy(&self) -> bool {
+        self.form.busy
+    }
+
+    fn footer(&self) -> &'static str {
+        "Tab/↑↓ field · ←→ change · Space toggle · Ctrl+T test · Enter save · Esc cancel"
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use relix_config::{KeyCode, Modifiers};
     use relix_driver_api::DriverCapabilities;
 
     fn drivers() -> Vec<DriverDescriptor> {
@@ -442,76 +590,156 @@ mod tests {
                 ConnectionTarget::File,
                 DriverCapabilities::relational(),
             ),
+            DriverDescriptor::test(
+                "bigquery",
+                "BigQuery",
+                ConnectionTarget::Cloud,
+                DriverCapabilities::relational(),
+            ),
         ]
     }
 
-    fn set_text(form: &mut DataSourceForm, id: FieldId, value: &str) {
-        if let Some(FormField {
-            value: FieldValue::Text(input) | FieldValue::Secret(input),
-            ..
-        }) = form.field_mut(id)
-        {
-            input.set(value);
+    fn servers() -> ServerChoices {
+        ServerChoices {
+            ssh: vec![ServerChoice {
+                id: ServerConfigId::new(),
+                label: "Production Bastion · global".into(),
+            }],
+            vpn: vec![ServerChoice {
+                id: ServerConfigId::new(),
+                label: "Office · project".into(),
+            }],
         }
+    }
+
+    fn focus(form: &mut DataSourceForm, id: FieldId) {
+        form.form.focused = form
+            .form
+            .fields
+            .iter()
+            .position(|field| field.id == id)
+            .unwrap();
+    }
+
+    fn press(form: &mut DataSourceForm, code: KeyCode) {
+        form.handle_key(KeyChord::new(code, Modifiers::NONE));
     }
 
     #[test]
     fn builds_network_definition_with_password() {
-        let mut form = DataSourceForm::new(drivers(), None);
-        set_text(&mut form, FieldId::Name, "Local");
-        set_text(&mut form, FieldId::Port, "");
-        set_text(&mut form, FieldId::Database, "app");
-        set_text(&mut form, FieldId::Password, "pw");
+        let mut form = DataSourceForm::new(drivers(), None, servers());
+        form.form.set_text(FieldId::Name, "Local");
+        form.form.set_text(FieldId::Port, "");
+        form.form.set_text(FieldId::Database, "app");
+        form.form.set_text(FieldId::Password, "pw");
+        form.form.set_text(
+            FieldId::Properties,
+            "application_name=relix; sslnegotiation = direct",
+        );
         let (definition, password) = form.build().unwrap();
         assert_eq!(definition.driver.as_str(), "postgres");
         assert_eq!(definition.settings.port, Some(5432));
         assert_eq!(definition.settings.database.as_deref(), Some("app"));
+        assert_eq!(
+            definition.settings.property("sslnegotiation"),
+            Some("direct")
+        );
+        assert_eq!(definition.network.mode, NetworkMode::Direct);
         assert_eq!(password, Some(Secret::new("pw")));
     }
 
     #[test]
     fn switching_engine_updates_default_port_and_visible_fields() {
-        let mut form = DataSourceForm::new(drivers(), None);
-        set_text(&mut form, FieldId::Port, "5432");
-        form.focused = 1;
-        form.cycle_choice(1);
-        assert_eq!(form.text_of(FieldId::Port), "3306");
-        form.cycle_choice(1);
+        let mut form = DataSourceForm::new(drivers(), None, servers());
+        form.form.set_text(FieldId::Port, "5432");
+        focus(&mut form, FieldId::Driver);
+        press(&mut form, KeyCode::Right);
+        assert_eq!(form.form.text(FieldId::Port), "3306");
+        press(&mut form, KeyCode::Right);
         assert!(form.is_visible(FieldId::FilePath));
         assert!(!form.is_visible(FieldId::Host));
-        set_text(&mut form, FieldId::Name, "Notes");
+        assert!(!form.is_visible(FieldId::NetworkMode));
+        form.form.set_text(FieldId::Name, "Notes");
         assert_eq!(form.build().unwrap_err(), "a database file is required");
-        set_text(&mut form, FieldId::FilePath, "/tmp/notes.db");
+        form.form.set_text(FieldId::FilePath, "/tmp/notes.db");
         let (definition, _) = form.build().unwrap();
         assert_eq!(definition.settings.host, None);
     }
 
     #[test]
-    fn new_forms_prefill_the_engine_default_port() {
-        let form = DataSourceForm::new(drivers(), None);
-        assert_eq!(form.text_of(FieldId::Port), "5432");
+    fn ssh_mode_requires_and_stores_a_server_reference() {
+        let servers = servers();
+        let bastion = servers.ssh[0].id;
+        let mut form = DataSourceForm::new(drivers(), None, servers);
+        form.form.set_text(FieldId::Name, "Production");
+        assert!(!form.is_visible(FieldId::SshConfig));
+        focus(&mut form, FieldId::NetworkMode);
+        press(&mut form, KeyCode::Right);
+        assert!(form.is_visible(FieldId::SshConfig) && form.is_visible(FieldId::LocalPort));
+        assert!(!form.is_visible(FieldId::VpnProfile));
+        form.form.set_text(FieldId::LocalPort, "15432");
+        let (definition, _) = form.build().unwrap();
+        assert_eq!(definition.network.mode, NetworkMode::SshTunnel);
+        assert_eq!(definition.network.ssh, Some(bastion));
+        assert_eq!(definition.network.local_port, Some(15432));
+        assert_eq!(definition.network.vpn, None);
+    }
+
+    #[test]
+    fn missing_configurations_and_cloud_tunnels_are_rejected() {
+        let mut existing = DataSourceDefinition::new("Main", DriverId::from("postgres"));
+        existing.network.mode = NetworkMode::SshTunnel;
+        existing.network.ssh = Some(ServerConfigId::new());
+        let form = DataSourceForm::new(drivers(), Some(&existing), servers());
+        assert_eq!(
+            form.build().unwrap_err(),
+            "select an existing SSH configuration"
+        );
+
+        let mut form = DataSourceForm::new(drivers(), None, servers());
+        form.form.set_text(FieldId::Name, "Warehouse");
+        focus(&mut form, FieldId::Driver);
+        press(&mut form, KeyCode::Left);
+        assert!(!form.is_visible(FieldId::Host));
+        focus(&mut form, FieldId::NetworkMode);
+        press(&mut form, KeyCode::Right);
+        assert!(
+            form.build()
+                .unwrap_err()
+                .contains("SSH tunnels cannot carry it")
+        );
     }
 
     #[test]
     fn validation_errors() {
-        let mut form = DataSourceForm::new(drivers(), None);
+        let mut form = DataSourceForm::new(drivers(), None, ServerChoices::default());
         assert_eq!(form.build().unwrap_err(), "name is required");
-        set_text(&mut form, FieldId::Name, "x");
-        set_text(&mut form, FieldId::Port, "99999");
+        form.form.set_text(FieldId::Name, "x");
+        form.form.set_text(FieldId::Port, "99999");
         assert!(form.build().unwrap_err().contains("invalid port"));
-        set_text(&mut form, FieldId::Port, "1");
-        set_text(&mut form, FieldId::Color, "blurple");
+        form.form.set_text(FieldId::Port, "1");
+        form.form.set_text(FieldId::Color, "blurple");
         assert!(form.build().unwrap_err().contains("invalid color"));
+        form.form.set_text(FieldId::Color, "");
+        form.form.set_text(FieldId::Properties, "novalue");
+        assert!(form.build().unwrap_err().contains("key=value"));
     }
 
     #[test]
-    fn editing_keeps_stored_password_unless_touched() {
+    fn editing_keeps_stored_password_and_unknown_fields() {
         let mut existing = DataSourceDefinition::new("Main", DriverId::from("postgres"));
         existing.settings.port = Some(5433);
-        let form = DataSourceForm::new(drivers(), Some(&existing));
+        existing.settings.query_timeout_secs = Some(30);
+        existing
+            .settings
+            .properties
+            .insert("role".into(), "analyst".into());
+        let form = DataSourceForm::new(drivers(), Some(&existing), servers());
         let (definition, password) = form.build().unwrap();
         assert_eq!(definition.id, existing.id);
         assert_eq!(definition.settings.port, Some(5433));
+        assert_eq!(definition.settings.query_timeout_secs, Some(30));
+        assert_eq!(definition.settings.property("role"), Some("analyst"));
         assert_eq!(password, None);
     }
 }
