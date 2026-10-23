@@ -6,7 +6,7 @@ default-members = ["crates/relix"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.89"
 license = "MIT"
 authors = ["t0bx"]
 repository = "https://github.com/t0bx/relix"
@@ -45,3 +45,9 @@ todo = "warn"
 lto = "thin"
 codegen-units = 1
 strip = true
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
