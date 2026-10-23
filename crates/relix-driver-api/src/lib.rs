@@ -7,6 +7,7 @@ pub mod capabilities;
 pub mod connection;
 pub mod driver;
 pub mod error;
+pub mod ipc;
 pub mod key_value;
 pub mod sql;
 pub mod sql_builder;
