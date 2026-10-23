@@ -39,4 +39,12 @@ pub trait DatabaseConnection: Send + Sync {
     fn as_document(&self) -> Option<&dyn DocumentConnection> {
         None
     }
+
+    fn network_route(&self) -> Option<String> {
+        None
+    }
+
+    fn network_status(&self) -> Option<String> {
+        None
+    }
 }
