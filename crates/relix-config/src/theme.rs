@@ -175,6 +175,12 @@ impl ThemeCatalog {
             .ok_or_else(|| ConfigError::UnknownTheme(name.to_owned()))
     }
 
+    /// Returns the named theme, falling back to the built-in dark theme so a missing or
+    /// misspelled theme never prevents startup.
+    pub fn resolve(&self, name: &str) -> Theme {
+        self.get(name).unwrap_or_else(|_| dark())
+    }
+
     pub fn names(&self) -> Vec<&str> {
         self.themes
             .iter()
@@ -337,6 +343,7 @@ mod tests {
         assert_eq!(catalog.names(), vec!["dark", "light", "high-contrast"]);
         assert!(catalog.get("DARK").is_ok());
         assert!(catalog.get("solarized").is_err());
+        assert_eq!(catalog.resolve("solarized").name, "dark");
     }
 
     #[test]
