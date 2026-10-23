@@ -1,0 +1,40 @@
+[package]
+name = "relix"
+description = "RELIX — a modern database IDE for your terminal"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "../../README.md"
+keywords.workspace = true
+categories.workspace = true
+
+[[bin]]
+name = "relix"
+path = "src/main.rs"
+
+[dependencies]
+relix-app = { path = "../relix-app" }
+relix-config.workspace = true
+relix-core.workspace = true
+relix-driver-api.workspace = true
+relix-driver-manager = { path = "../relix-driver-manager" }
+relix-driver-mysql = { path = "../relix-driver-mysql" }
+relix-driver-postgres = { path = "../relix-driver-postgres" }
+relix-driver-redis = { path = "../relix-driver-redis" }
+relix-driver-sqlite = { path = "../relix-driver-sqlite" }
+relix-project.workspace = true
+relix-tui = { path = "../relix-tui" }
+anyhow.workspace = true
+async-trait.workspace = true
+clap = { version = "4.6.7", features = ["derive"] }
+tokio.workspace = true
+tracing = "0.1.44"
+tracing-appender = "0.2.5"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
+
+[lints]
+workspace = true
