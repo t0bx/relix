@@ -34,6 +34,14 @@ impl ManagerDriverService {
     }
 }
 
+/// Built-in engines in the order users expect them; external connectors follow.
+fn display_rank(id: &DriverId) -> usize {
+    [DriverId::POSTGRES, DriverId::MYSQL, DriverId::MARIADB, DriverId::SQLITE, DriverId::REDIS]
+        .iter()
+        .position(|known| *known == id.as_str())
+        .unwrap_or(usize::MAX)
+}
+
 fn describe_offer(offer: &PackageOffer) -> InstallOffer {
     let host = offer
         .artifact
@@ -60,7 +68,8 @@ impl DriverService for ManagerDriverService {
     }
 
     fn descriptors(&self) -> Vec<DriverDescriptor> {
-        self.manager
+        let mut descriptors: Vec<DriverDescriptor> = self
+            .manager
             .entries()
             .into_iter()
             .filter_map(|entry| {
@@ -76,7 +85,9 @@ impl DriverService for ManagerDriverService {
                 }
                 Some(descriptor)
             })
-            .collect()
+            .collect();
+        descriptors.sort_by_key(|descriptor| (display_rank(&descriptor.id), descriptor.name.clone()));
+        descriptors
     }
 
     async fn find_offer(&self, id: &DriverId) -> Result<Option<InstallOffer>, String> {
