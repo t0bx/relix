@@ -8,10 +8,10 @@
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use relix_core::{ConnectionConfig, ConnectionSettings, Secret, TlsMode, TlsSettings};
+use relix_testing::rsa_keys::TEST_RSA_PRIVATE_KEY_PEM;
 use rsa::RsaPrivateKey;
 use rsa::pkcs1::EncodeRsaPublicKey;
-use rsa::pkcs8::{EncodePrivateKey, EncodePublicKey, LineEnding};
-use rsa::rand_core::OsRng;
+use rsa::pkcs8::{DecodePrivateKey, EncodePrivateKey, EncodePublicKey, LineEnding};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
@@ -22,7 +22,7 @@ pub const PASSPHRASE: &str = "correct horse battery staple";
 
 pub fn private_key() -> &'static RsaPrivateKey {
     static KEY: OnceLock<RsaPrivateKey> = OnceLock::new();
-    KEY.get_or_init(|| RsaPrivateKey::new(&mut OsRng, 2048).unwrap())
+    KEY.get_or_init(|| RsaPrivateKey::from_pkcs8_pem(TEST_RSA_PRIVATE_KEY_PEM).unwrap())
 }
 
 pub fn expected_fingerprint() -> String {
@@ -53,11 +53,12 @@ pub fn write_key_file(encrypted: bool) -> PathBuf {
             .unwrap()
             .to_string()
     } else {
-        private_key()
-            .to_pkcs8_pem(LineEnding::LF)
-            .unwrap()
-            .to_string()
+        TEST_RSA_PRIVATE_KEY_PEM.to_owned()
     };
+    write_pem(&pem)
+}
+
+pub fn write_pem(pem: &str) -> PathBuf {
     let path = std::env::temp_dir().join(format!("relix-snowflake-{}.p8", uuid::Uuid::new_v4()));
     std::fs::write(&path, pem).unwrap();
     path

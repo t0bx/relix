@@ -12,6 +12,7 @@ use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use relix_core::TlsMode;
 use relix_driver_api::{DatabaseDriver, ErrorKind};
 use relix_driver_snowflake::SnowflakeDriver;
+use relix_testing::rsa_keys::{TEST_RSA_KEY_PASSPHRASE, TEST_RSA_PRIVATE_KEY_DES3_PEM};
 use serde_json::json;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -120,6 +121,29 @@ async fn encrypted_private_keys_use_the_password_as_passphrase() {
     .unwrap()
     .claims;
     assert_eq!(claims["sub"], "ACME.ANALYST");
+}
+
+#[tokio::test]
+async fn keys_encrypted_as_in_the_snowflake_documentation_are_accepted() {
+    let server = server_answering_version().await;
+    let path = write_pem(TEST_RSA_PRIVATE_KEY_DES3_PEM);
+    let config = with_password(
+        config(&server, &[("private_key_file", path.to_str().unwrap())]),
+        TEST_RSA_KEY_PASSPHRASE,
+    );
+    SnowflakeDriver::new().connect(&config).await.unwrap();
+    let request = &server.received_requests().await.unwrap()[0];
+    let claims: serde_json::Value = decode(
+        &bearer(request),
+        &DecodingKey::from_rsa_der(&public_key_pkcs1_der()),
+        &Validation::new(Algorithm::RS256),
+    )
+    .unwrap()
+    .claims;
+    assert_eq!(
+        claims["iss"],
+        format!("ACME.ANALYST.{}", expected_fingerprint())
+    );
 }
 
 #[tokio::test]
