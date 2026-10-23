@@ -6,6 +6,7 @@
 use crate::driver::DEFAULT_PORT;
 use crate::errors::{is_tls_failure, map_error};
 use crate::managed_client::ManagedClient;
+use crate::server_name_tls::ServerNameTls;
 use crate::tls::tls_connector;
 use relix_core::{ConnectionConfig, TlsMode};
 use relix_driver_api::{DriverError, with_timeout};
@@ -13,7 +14,6 @@ use std::time::Duration;
 use tokio_postgres::config::SslMode;
 use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use tokio_postgres::{CancelToken, Config, NoTls, Socket};
-use tokio_postgres_rustls::MakeRustlsConnect;
 
 const DEFAULT_USER: &str = "postgres";
 const APPLICATION_NAME: &str = "relix";
@@ -22,7 +22,7 @@ pub(crate) struct Connector {
     base: Config,
     configured_database: String,
     tls_mode: TlsMode,
-    tls: Option<MakeRustlsConnect>,
+    tls: Option<ServerNameTls>,
     timeout: Duration,
 }
 
@@ -47,7 +47,9 @@ impl Connector {
             base,
             configured_database,
             tls_mode: settings.tls.mode,
-            tls: tls_connector(&settings.tls).await?,
+            tls: tls_connector(&settings.tls)
+                .await?
+                .map(|tls| ServerNameTls::new(tls, config.tls_server_name.clone())),
             timeout,
         })
     }

@@ -33,7 +33,7 @@ async fn establish(
 ) -> Result<MySqlConnection, DriverError> {
     let base = base_options(config);
     let mut last_error = None;
-    for ssl in tls_attempts(&config.settings.tls).await? {
+    for ssl in tls_attempts(&config.settings.tls, config.tls_server_name.as_deref()).await? {
         let opts: Opts = base.clone().ssl_opts(ssl).into();
         match Conn::new(opts.clone()).await {
             Ok(session) => return finish(flavor, config, opts, session).await,

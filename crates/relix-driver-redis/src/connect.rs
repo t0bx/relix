@@ -11,7 +11,7 @@ use crate::server_details::{parse_info, redis_version};
 use crate::tls::{build_client, uses_tls};
 use redis::RedisConnectionInfo;
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
-use relix_core::ConnectionConfig;
+use relix_core::{ConnectionConfig, TlsMode};
 use relix_driver_api::{DriverError, ErrorKind, ServerInfo, with_timeout};
 use std::time::Duration;
 
@@ -26,6 +26,18 @@ pub async fn open_connection(config: &ConnectionConfig) -> Result<RedisConnectio
     let database = parse_database_index(settings.database.as_deref())?;
     let port = settings.port.unwrap_or(DEFAULT_PORT);
     let redis = handshake_settings(config, database);
+    if settings.tls.mode == TlsMode::VerifyFull
+        && config
+            .tls_server_name
+            .as_deref()
+            .is_some_and(|name| name != config.host_or_default())
+    {
+        return Err(DriverError::new(
+            ErrorKind::Tls,
+            "certificate verification through a forwarded endpoint is not supported by the \
+             Redis client: use TLS mode 'require' over the SSH tunnel or a VPN instead",
+        ));
+    }
     let client = build_client(config.host_or_default(), port, &settings.tls, redis).await?;
     let tls_enabled = uses_tls(settings.tls.mode);
     let manager_config = ConnectionManagerConfig::new()
@@ -99,6 +111,24 @@ async fn verify_server(runner: &CommandRunner) -> Result<String, DriverError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn verified_tls_through_a_forwarded_endpoint_is_refused() {
+        let settings = relix_core::ConnectionSettings {
+            host: Some("cache.internal".into()),
+            port: Some(6379),
+            tls: relix_core::TlsSettings {
+                mode: TlsMode::VerifyFull,
+                ca_certificate: None,
+            },
+            ..relix_core::ConnectionSettings::default()
+        };
+        let tunneled = ConnectionConfig::new(settings, None).redirected("127.0.0.1", 40000);
+        let Err(error) = open_connection(&tunneled).await else {
+            panic!("verification against a forwarded endpoint must not be attempted");
+        };
+        assert_eq!(error.kind, ErrorKind::Tls);
+    }
 
     #[test]
     fn database_index_defaults_to_zero() {

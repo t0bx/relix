@@ -10,13 +10,22 @@ use std::path::Path;
 
 /// Returns the TLS configurations to try in order; `None` stands for a plaintext attempt.
 /// `Prefer` tries an unverified TLS session first and falls back to plaintext.
-pub async fn tls_attempts(settings: &TlsSettings) -> Result<Vec<Option<SslOpts>>, DriverError> {
+pub async fn tls_attempts(
+    settings: &TlsSettings,
+    server_name: Option<&str>,
+) -> Result<Vec<Option<SslOpts>>, DriverError> {
     install_crypto_provider();
     Ok(match settings.mode {
         TlsMode::Disable => vec![None],
         TlsMode::Prefer => vec![Some(unverified()), None],
         TlsMode::Require => vec![Some(unverified())],
-        TlsMode::VerifyFull => vec![Some(verified(settings.ca_certificate.as_deref()).await?)],
+        TlsMode::VerifyFull => {
+            let verified = verified(settings.ca_certificate.as_deref()).await?;
+            vec![Some(match server_name {
+                Some(name) => verified.with_danger_tls_hostname_override(Some(name.to_owned())),
+                None => verified,
+            })]
+        }
     })
 }
 
@@ -60,11 +69,11 @@ mod tests {
 
     #[tokio::test]
     async fn modes_produce_expected_attempts() {
-        let disable = tls_attempts(&settings(TlsMode::Disable, None))
+        let disable = tls_attempts(&settings(TlsMode::Disable, None), None)
             .await
             .unwrap();
         assert_eq!(disable, vec![None]);
-        let prefer = tls_attempts(&settings(TlsMode::Prefer, None))
+        let prefer = tls_attempts(&settings(TlsMode::Prefer, None), None)
             .await
             .unwrap();
         assert_eq!(prefer.len(), 2);
@@ -74,7 +83,7 @@ mod tests {
                 .is_some_and(SslOpts::accept_invalid_certs)
         );
         assert!(prefer[1].is_none());
-        let require = tls_attempts(&settings(TlsMode::Require, None))
+        let require = tls_attempts(&settings(TlsMode::Require, None), None)
             .await
             .unwrap();
         assert!(
@@ -82,7 +91,7 @@ mod tests {
                 .as_ref()
                 .is_some_and(SslOpts::skip_domain_validation)
         );
-        let full = tls_attempts(&settings(TlsMode::VerifyFull, None))
+        let full = tls_attempts(&settings(TlsMode::VerifyFull, None), None)
             .await
             .unwrap();
         assert!(
@@ -98,7 +107,7 @@ mod tests {
             TlsMode::VerifyFull,
             Some("/nonexistent/relix-ca.pem".into()),
         );
-        let error = tls_attempts(&missing).await.unwrap_err();
+        let error = tls_attempts(&missing, None).await.unwrap_err();
         assert_eq!(error.kind, ErrorKind::Configuration);
     }
 }
