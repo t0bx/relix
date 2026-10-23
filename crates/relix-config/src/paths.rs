@@ -75,6 +75,18 @@ impl AppPaths {
     pub fn recent_projects_file(&self) -> PathBuf {
         self.data_dir.join("recent.toml")
     }
+
+    pub fn servers_file(&self) -> PathBuf {
+        self.config_dir.join("servers.toml")
+    }
+
+    pub fn known_hosts_file(&self) -> PathBuf {
+        self.config_dir.join("ssh").join("known_hosts")
+    }
+
+    pub fn vpn_runtime_dir(&self) -> PathBuf {
+        self.data_dir.join("vpn")
+    }
 }
 
 #[cfg(test)]
@@ -89,5 +101,7 @@ mod tests {
         assert!(paths.projects_dir().starts_with(dir.path()));
         assert!(paths.drivers_dir().is_dir());
         assert!(paths.settings_file().ends_with("config/config.toml"));
+        assert!(paths.servers_file().ends_with("config/servers.toml"));
+        assert!(paths.known_hosts_file().ends_with("config/ssh/known_hosts"));
     }
 }
