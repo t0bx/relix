@@ -2,3 +2,5 @@
 .idea
 CLAUDE.md
 impl-docs
+*.swp
+.DS_Store
