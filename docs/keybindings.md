@@ -19,6 +19,7 @@ which-key popup lists the possible continuations.
 | `Ctrl+K w` / `Space w` | Save script as… | `editor.save_as` |
 | `Ctrl+K o` / `Space o` | Open SQL file… | `editor.open_file` |
 | `Ctrl+K a` / `Space a` | Add data source | `datasource.add` |
+| `Ctrl+K n` / `Space n` | Server configurations (SSH / VPN) | `servers.open` |
 | `Ctrl+K d` / `Space d` | Driver manager | `drivers.show` |
 | `Ctrl+K h` / `Space h` | Query history | `history.show` |
 | `Ctrl+K t` / `Space t` | Cycle color theme | `theme.cycle` |
@@ -170,12 +171,29 @@ which-key popup lists the possible continuations.
 | `:` | Focus command console | `kv.console` |
 | `y` | Copy value | `kv.copy` |
 
+## Document browser (MongoDB, DynamoDB, Elasticsearch, OpenSearch)
+
+| Keys | Action | Command id |
+|---|---|---|
+| `Enter`, `e` | Edit document (JSON editor) | `doc.open`, `doc.edit` |
+| `a`, `Ins` | Insert document | `doc.insert` |
+| `d`, `Del` | Delete document | `doc.delete` |
+| `/` | Edit the filter (native JSON filter, `Enter` applies) | `doc.filter` |
+| `]`, `n` | Next page | `doc.next_page` |
+| `[`, `p` | Previous page | `doc.previous_page` |
+| `i` | Collection details and indexes | `doc.details` |
+| `+` | Create index | `doc.create_index` |
+| `-` | Drop index | `doc.drop_index` |
+| `y` | Copy document JSON | `doc.copy` |
+
 ## Inside popups
 
 | Popup | Keys |
 |---|---|
 | Pickers (palette, projects, history, drivers) | type to filter, `↑`/`↓`, `Enter` accept, `Esc` close; projects: `Ctrl+N` new, `Ctrl+R` rename, `Ctrl+D` delete; history: `Ctrl+R` run again; drivers: `Ctrl+U` check registries, `Ctrl+D` remove |
-| Data source form | `Tab`/`↑`/`↓` move, `←`/`→` change choice, `Space` toggle, `Ctrl+T` test connection, `Enter` save, `Esc` cancel |
+| Data source, SSH and VPN dialogs | `Tab`/`↑`/`↓` move, `←`/`→` change choice, `Space` toggle, `Ctrl+T` test, `Enter`/`Ctrl+S` save, `Esc` cancel; VPN dialog: `Ctrl+O` connect, `Ctrl+X` disconnect |
+| Server configurations | `n` new SSH, `v` new VPN, `Enter`/`e` edit, `d` delete, `y` duplicate, `r` rename, `t` test, `m` move / `c` copy to the other scope, `Space` connect/disconnect VPN, `Esc` close |
+| SSH host key / VPN approval | read the fingerprint or command, `Enter`/`y` to trust / run, `Esc` to refuse |
 | Confirmation | `Enter`/`y` confirm, `Esc`/`n` cancel |
 | Viewer (DDL, cell inspector) | `↑`/`↓`/`PgUp`/`PgDn` scroll, `y` copy, `Esc` close |
 | Multi-line editor | normal editing keys, `Ctrl+S` save, `Ctrl+Z` undo, `Esc` cancel |
