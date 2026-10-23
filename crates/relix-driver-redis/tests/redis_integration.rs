@@ -5,22 +5,60 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod common;
+
+use common::Engine;
 use relix_core::keyvalue::{
     CommandReply, KeyName, KeyType, KeyValueWrite, Ttl, ValuePage, ValueRange,
 };
 use relix_core::{ConnectionConfig, Secret, TlsMode};
-use relix_driver_api::{DatabaseConnection, DatabaseDriver, ErrorKind, KeyValueConnection};
-use relix_driver_redis::RedisDriver;
-use relix_testing::integration::{TestEngine, integration_config, unique_name};
+use relix_driver_api::{DatabaseConnection, ErrorKind, KeyValueConnection};
+use relix_testing::integration::unique_name;
 use std::collections::BTreeSet;
 
-async fn connect_with(config: &ConnectionConfig) -> Box<dyn DatabaseConnection> {
-    RedisDriver::new().connect(config).await.expect("connect")
+macro_rules! for_each_engine {
+    ($($test:ident),* $(,)?) => {
+        for_each_engine!(@engine redis, Redis, $($test),*);
+        for_each_engine!(@engine valkey, Valkey, $($test),*);
+    };
+    (@engine $module:ident, $engine:ident, $($test:ident),*) => {
+        mod $module {
+            $(
+                #[tokio::test]
+                async fn $test() {
+                    super::$test(super::Engine::$engine).await;
+                }
+            )*
+        }
+    };
 }
 
-async fn connect() -> Option<Box<dyn DatabaseConnection>> {
-    let config = integration_config(TestEngine::Redis)?;
-    Some(connect_with(&config).await)
+for_each_engine!(
+    connects_pings_and_reports_server_info,
+    wrong_password_is_an_authentication_error,
+    missing_password_is_an_authentication_error,
+    wrong_port_is_a_connection_error,
+    non_numeric_database_is_a_configuration_error,
+    database_index_selects_a_separate_keyspace,
+    scan_walks_many_keys_incrementally_with_a_pattern,
+    describe_key_reports_every_type,
+    binary_key_names_round_trip,
+    read_value_pages_strings_lists_and_sorted_sets_by_index,
+    read_value_pages_sets_and_hashes_by_cursor,
+    read_value_returns_the_first_stream_entries_and_flags_unsupported_types,
+    every_write_operation_reaches_the_server,
+    execute_command_returns_replies_and_server_errors,
+    server_details_include_info_and_dbsize,
+    tls_against_a_plaintext_server_fails_cleanly,
+);
+
+async fn connect_with(engine: Engine, config: &ConnectionConfig) -> Box<dyn DatabaseConnection> {
+    engine.driver().connect(config).await.expect("connect")
+}
+
+async fn connect(engine: Engine) -> Option<Box<dyn DatabaseConnection>> {
+    let config = engine.config()?;
+    Some(connect_with(engine, &config).await)
 }
 
 fn kv(connection: &dyn DatabaseConnection) -> &dyn KeyValueConnection {
@@ -60,13 +98,12 @@ async fn delete_matching(connection: &dyn KeyValueConnection, pattern: &str) {
     }
 }
 
-#[tokio::test]
-async fn connects_pings_and_reports_server_info() {
-    let Some(connection) = connect().await else {
+async fn connects_pings_and_reports_server_info(engine: Engine) {
+    let Some(connection) = connect(engine).await else {
         return;
     };
     let info = connection.server_info();
-    assert_eq!(info.product, "Redis");
+    assert_eq!(info.product, engine.product());
     assert!(
         info.version.starts_with(char::is_numeric),
         "{}",
@@ -79,56 +116,51 @@ async fn connects_pings_and_reports_server_info() {
     assert_eq!(error.kind, ErrorKind::Connection);
 }
 
-#[tokio::test]
-async fn wrong_password_is_an_authentication_error() {
-    let Some(mut config) = integration_config(TestEngine::Redis) else {
+async fn wrong_password_is_an_authentication_error(engine: Engine) {
+    let Some(mut config) = engine.config() else {
         return;
     };
     config.password = Some(Secret::new("definitely-wrong"));
-    let error = RedisDriver::new().connect(&config).await.err().unwrap();
+    let error = engine.driver().connect(&config).await.err().unwrap();
     assert_eq!(error.kind, ErrorKind::Authentication, "{error}");
     assert!(!error.to_string().contains("definitely-wrong"));
 }
 
-#[tokio::test]
-async fn missing_password_is_an_authentication_error() {
-    let Some(mut config) = integration_config(TestEngine::Redis) else {
+async fn missing_password_is_an_authentication_error(engine: Engine) {
+    let Some(mut config) = engine.config() else {
         return;
     };
     config.password = None;
-    let error = RedisDriver::new().connect(&config).await.err().unwrap();
+    let error = engine.driver().connect(&config).await.err().unwrap();
     assert_eq!(error.kind, ErrorKind::Authentication, "{error}");
 }
 
-#[tokio::test]
-async fn wrong_port_is_a_connection_error() {
-    let Some(mut config) = integration_config(TestEngine::Redis) else {
+async fn wrong_port_is_a_connection_error(engine: Engine) {
+    let Some(mut config) = engine.config() else {
         return;
     };
     config.settings.port = Some(1);
-    let error = RedisDriver::new().connect(&config).await.err().unwrap();
+    let error = engine.driver().connect(&config).await.err().unwrap();
     assert_eq!(error.kind, ErrorKind::Connection, "{error}");
 }
 
-#[tokio::test]
-async fn non_numeric_database_is_a_configuration_error() {
-    let Some(mut config) = integration_config(TestEngine::Redis) else {
+async fn non_numeric_database_is_a_configuration_error(engine: Engine) {
+    let Some(mut config) = engine.config() else {
         return;
     };
     config.settings.database = Some("main".to_owned());
-    let error = RedisDriver::new().connect(&config).await.err().unwrap();
+    let error = engine.driver().connect(&config).await.err().unwrap();
     assert_eq!(error.kind, ErrorKind::Configuration);
 }
 
-#[tokio::test]
-async fn database_index_selects_a_separate_keyspace() {
-    let Some(mut config) = integration_config(TestEngine::Redis) else {
+async fn database_index_selects_a_separate_keyspace(engine: Engine) {
+    let Some(mut config) = engine.config() else {
         return;
     };
     config.settings.database = Some("3".to_owned());
-    let other_db = connect_with(&config).await;
+    let other_db = connect_with(engine, &config).await;
     config.settings.database = Some("0".to_owned());
-    let default_db = connect_with(&config).await;
+    let default_db = connect_with(engine, &config).await;
     let key = unique_name("relix_redis_db");
     run(kv(other_db.as_ref()), &["SET", &key, "x"]).await;
     let description = kv(default_db.as_ref())
@@ -139,9 +171,8 @@ async fn database_index_selects_a_separate_keyspace() {
     delete_keys(kv(other_db.as_ref()), &[key]).await;
 }
 
-#[tokio::test]
-async fn scan_walks_many_keys_incrementally_with_a_pattern() {
-    let Some(connection) = connect().await else {
+async fn scan_walks_many_keys_incrementally_with_a_pattern(engine: Engine) {
+    let Some(connection) = connect(engine).await else {
         return;
     };
     let kv = kv(connection.as_ref());
@@ -178,9 +209,8 @@ async fn scan_walks_many_keys_incrementally_with_a_pattern() {
     assert!(empty.keys.is_empty());
 }
 
-#[tokio::test]
-async fn describe_key_reports_every_type() {
-    let Some(connection) = connect().await else {
+async fn describe_key_reports_every_type(engine: Engine) {
+    let Some(connection) = connect(engine).await else {
         return;
     };
     let kv = kv(connection.as_ref());
@@ -232,9 +262,8 @@ async fn describe_key_reports_every_type() {
     delete_matching(kv, &format!("{prefix}:*")).await;
 }
 
-#[tokio::test]
-async fn binary_key_names_round_trip() {
-    let Some(connection) = connect().await else {
+async fn binary_key_names_round_trip(engine: Engine) {
+    let Some(connection) = connect(engine).await else {
         return;
     };
     let kv = kv(connection.as_ref());
@@ -264,9 +293,8 @@ async fn binary_key_names_round_trip() {
     kv.write(&KeyValueWrite::Delete { key }).await.unwrap();
 }
 
-#[tokio::test]
-async fn read_value_pages_strings_lists_and_sorted_sets_by_index() {
-    let Some(connection) = connect().await else {
+async fn read_value_pages_strings_lists_and_sorted_sets_by_index(engine: Engine) {
+    let Some(connection) = connect(engine).await else {
         return;
     };
     let kv = kv(connection.as_ref());
@@ -394,9 +422,8 @@ async fn read_value_pages_strings_lists_and_sorted_sets_by_index() {
     delete_keys(kv, &[string_key, list_key, zset_key]).await;
 }
 
-#[tokio::test]
-async fn read_value_pages_sets_and_hashes_by_cursor() {
-    let Some(connection) = connect().await else {
+async fn read_value_pages_sets_and_hashes_by_cursor(engine: Engine) {
+    let Some(connection) = connect(engine).await else {
         return;
     };
     let kv = kv(connection.as_ref());
@@ -481,9 +508,8 @@ async fn read_value_pages_sets_and_hashes_by_cursor() {
     delete_keys(kv, &[set_key, hash_key]).await;
 }
 
-#[tokio::test]
-async fn read_value_returns_the_first_stream_entries_and_flags_unsupported_types() {
-    let Some(connection) = connect().await else {
+async fn read_value_returns_the_first_stream_entries_and_flags_unsupported_types(engine: Engine) {
+    let Some(connection) = connect(engine).await else {
         return;
     };
     let kv = kv(connection.as_ref());
@@ -530,9 +556,8 @@ async fn read_value_returns_the_first_stream_entries_and_flags_unsupported_types
     delete_keys(kv, &[stream_key]).await;
 }
 
-#[tokio::test]
-async fn every_write_operation_reaches_the_server() {
-    let Some(connection) = connect().await else {
+async fn every_write_operation_reaches_the_server(engine: Engine) {
+    let Some(connection) = connect(engine).await else {
         return;
     };
     let kv = kv(connection.as_ref());
@@ -726,9 +751,8 @@ async fn every_write_operation_reaches_the_server() {
     }
 }
 
-#[tokio::test]
-async fn execute_command_returns_replies_and_server_errors() {
-    let Some(connection) = connect().await else {
+async fn execute_command_returns_replies_and_server_errors(engine: Engine) {
+    let Some(connection) = connect(engine).await else {
         return;
     };
     let kv = kv(connection.as_ref());
@@ -774,9 +798,8 @@ async fn execute_command_returns_replies_and_server_errors() {
     delete_keys(kv, &[key]).await;
 }
 
-#[tokio::test]
-async fn server_details_include_info_and_dbsize() {
-    let Some(connection) = connect().await else {
+async fn server_details_include_info_and_dbsize(engine: Engine) {
+    let Some(connection) = connect(engine).await else {
         return;
     };
     let details = kv(connection.as_ref()).server_details().await.unwrap();
@@ -787,22 +810,21 @@ async fn server_details_include_info_and_dbsize() {
             .map(|(_, value)| value.clone())
     };
     assert_eq!(
-        lookup("server.redis_version"),
+        lookup(engine.version_key()),
         Some(connection.server_info().version)
     );
     assert!(lookup("memory.used_memory").is_some());
     assert!(lookup("dbsize").is_some_and(|size| size.parse::<u64>().is_ok()));
 }
 
-#[tokio::test]
-async fn tls_against_a_plaintext_server_fails_cleanly() {
-    let Some(mut config) = integration_config(TestEngine::Redis) else {
+async fn tls_against_a_plaintext_server_fails_cleanly(engine: Engine) {
+    let Some(mut config) = engine.config() else {
         return;
     };
     config.settings.connect_timeout_secs = 2;
     for mode in [TlsMode::Require, TlsMode::VerifyFull] {
         config.settings.tls.mode = mode;
-        let error = RedisDriver::new().connect(&config).await.err().unwrap();
+        let error = engine.driver().connect(&config).await.err().unwrap();
         assert!(
             matches!(
                 error.kind,
@@ -814,4 +836,21 @@ async fn tls_against_a_plaintext_server_fails_cleanly() {
             assert!(error.detail.is_some_and(|detail| detail.contains("TLS")));
         }
     }
+}
+
+#[tokio::test]
+async fn redis_driver_names_a_valkey_server() {
+    let Some(config) = Engine::Valkey.config() else {
+        return;
+    };
+    let connection = connect_with(Engine::Redis, &config).await;
+    let info = connection.server_info();
+    assert_eq!(info.product, "Valkey (connected via Redis driver)");
+    let details = kv(connection.as_ref()).server_details().await.unwrap();
+    assert!(
+        details
+            .iter()
+            .any(|(key, value)| key == "server.valkey_version" && *value == info.version)
+    );
+    connection.close().await.unwrap();
 }
