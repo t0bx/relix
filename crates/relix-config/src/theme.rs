@@ -13,17 +13,25 @@ use std::path::Path;
 macro_rules! theme_colors {
     ($($field:ident),* $(,)?) => {
         #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-        pub struct ThemeColors {
-            $(pub $field: ColorSpec,)*
+        pub struct ThemePalette<T> {
+            $(pub $field: T,)*
         }
 
-        impl ThemeColors {
+        pub type ThemeColors = ThemePalette<ColorSpec>;
+
+        impl<T> ThemePalette<T> {
             pub const FIELDS: &'static [&'static str] = &[$(stringify!($field)),*];
 
-            pub fn set(&mut self, name: &str, color: ColorSpec) -> bool {
+            pub fn map<U>(&self, convert: impl Fn(&T) -> U) -> ThemePalette<U> {
+                ThemePalette {
+                    $($field: convert(&self.$field),)*
+                }
+            }
+
+            pub fn set(&mut self, name: &str, value: T) -> bool {
                 match name {
                     $(stringify!($field) => {
-                        self.$field = color;
+                        self.$field = value;
                         true
                     })*
                     _ => false,
@@ -362,6 +370,12 @@ mod tests {
         assert_eq!(mine.colors.background, light().colors.background);
         assert_eq!(mine.borders, BorderKind::Double);
         assert_eq!(catalog.warnings.len(), 2);
+    }
+
+    #[test]
+    fn palettes_map_every_field() {
+        let names = dark().colors.map(ToString::to_string);
+        assert_eq!(names.accent, "#82aaff");
     }
 
     #[test]
