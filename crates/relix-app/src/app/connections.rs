@@ -159,6 +159,12 @@ impl App {
             self.offer_driver_install(source, definition.driver.clone());
             return;
         };
+        if let Some(missing) = driver.dependency_status().describe() {
+            self.connections.entry(source).or_default().status =
+                ConnectionStatus::Failed(missing.clone());
+            self.notify(Level::Error, format!("{}: {missing}", definition.name));
+            return;
+        }
         let plan = match self.network_plan(&definition, driver.as_ref()) {
             Ok(plan) => plan,
             Err(error) => {

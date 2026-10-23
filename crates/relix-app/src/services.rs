@@ -107,6 +107,10 @@ impl StaticDriverService {
 
 pub fn describe_driver(driver: &dyn DatabaseDriver, status: &str) -> DriverDescriptor {
     let metadata = driver.metadata();
+    let status = driver
+        .dependency_status()
+        .describe()
+        .unwrap_or_else(|| status.to_owned());
     DriverDescriptor {
         default_port: metadata.default_port(),
         id: metadata.id,
@@ -116,7 +120,7 @@ pub fn describe_driver(driver: &dyn DatabaseDriver, status: &str) -> DriverDescr
             relix_driver_api::DriverOrigin::BuiltIn => "built-in".to_owned(),
             relix_driver_api::DriverOrigin::External { package } => format!("external ({package})"),
         },
-        status: status.to_owned(),
+        status,
         target: metadata.target,
         dialect: metadata.dialect,
         capabilities: driver.capabilities(),

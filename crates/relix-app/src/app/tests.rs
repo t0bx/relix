@@ -431,3 +431,68 @@ async fn missing_driver_is_offered_installed_after_approval_and_connection_retri
         ConnectionStatus::Connected
     );
 }
+
+struct NativeClientDriver;
+
+#[async_trait::async_trait]
+impl relix_driver_api::DatabaseDriver for NativeClientDriver {
+    fn metadata(&self) -> relix_driver_api::DriverMetadata {
+        relix_driver_api::DriverMetadata::built_in(
+            "native",
+            "Native",
+            None,
+            relix_driver_api::ConnectionTarget::Network { default_port: 1 },
+        )
+    }
+
+    fn capabilities(&self) -> relix_driver_api::DriverCapabilities {
+        relix_driver_api::DriverCapabilities::relational()
+    }
+
+    fn dependency_status(&self) -> relix_driver_api::DependencyStatus {
+        relix_driver_api::DependencyStatus::Missing {
+            component: "Native client library".into(),
+            hint: "install it and restart Relix".into(),
+        }
+    }
+
+    async fn connect(
+        &self,
+        _config: &relix_core::ConnectionConfig,
+    ) -> Result<Box<dyn relix_driver_api::DatabaseConnection>, relix_driver_api::DriverError> {
+        panic!("a driver with missing dependencies must not be asked to connect")
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn missing_native_dependencies_are_reported_before_connecting() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = Harness::new(dir.path(), vec![Arc::new(NativeClientDriver)]);
+    harness.app.startup(Some("Development"));
+    let descriptor = harness
+        .app
+        .context()
+        .drivers
+        .descriptors()
+        .into_iter()
+        .find(|descriptor| descriptor.id.as_str() == "native")
+        .unwrap();
+    assert!(
+        descriptor
+            .status
+            .contains("Native client library is missing")
+    );
+    let mut definition = DataSourceDefinition::new("Native", DriverId::from("native"));
+    definition.settings.save_password = false;
+    let source = harness.add_data_source(definition);
+    harness
+        .app
+        .session_passwords
+        .insert(source, relix_core::Secret::new("pw"));
+    harness.app.connect(source);
+    harness.settle().await;
+    let ConnectionStatus::Failed(message) = harness.app.connection_status(source) else {
+        panic!("connection must fail");
+    };
+    assert!(message.contains("install it and restart Relix"));
+}
