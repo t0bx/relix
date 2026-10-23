@@ -7,6 +7,7 @@ use crate::error::{HostKeyPrompt, SshError};
 use crate::forward::LocalForward;
 use crate::hop::{HopSecrets, ResolvedHop};
 use crate::known_hosts::HostKeyStore;
+use crate::session::SshSession;
 use crate::shared_session::SharedSession;
 use crate::status::TunnelStatus;
 use relix_core::SshServerConfig;
@@ -134,6 +135,21 @@ impl TunnelManager {
             status: shared.subscribe(),
             server: last.name.clone(),
         })
+    }
+
+    pub async fn verify(
+        &self,
+        chain: &[SshServerConfig],
+        secrets: &[HopSecrets],
+    ) -> Result<String, SshError> {
+        let hops = chain
+            .iter()
+            .map(ResolvedHop::from_config)
+            .collect::<Result<Vec<_>, _>>()?;
+        let session = SshSession::connect(&hops, secrets, &self.store).await?;
+        let endpoint = session.endpoint().to_owned();
+        session.disconnect().await;
+        Ok(endpoint)
     }
 
     pub fn trust_host_key(&self, prompt: &HostKeyPrompt) -> Result<(), SshError> {

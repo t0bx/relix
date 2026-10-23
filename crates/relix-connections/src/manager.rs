@@ -118,6 +118,14 @@ impl ConnectionManager {
         Ok((redirected, leases))
     }
 
+    pub async fn test_ssh(
+        &self,
+        chain: &[relix_core::SshServerConfig],
+        secrets: &[HopSecrets],
+    ) -> Result<String, ConnectionError> {
+        Ok(self.tunnels.verify(chain, secrets).await?)
+    }
+
     pub fn trust_host_key(&self, prompt: &HostKeyPrompt) -> Result<(), SshError> {
         self.tunnels.trust_host_key(prompt)
     }

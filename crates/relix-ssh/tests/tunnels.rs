@@ -318,6 +318,25 @@ async fn tunnels_reconnect_after_the_server_restarts() {
 }
 
 #[tokio::test]
+async fn verification_connects_without_forwarding() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = TestServer::start(None).await;
+    let manager = manager(dir.path());
+    let config = ssh_config("Bastion", server.port, SshAuthMethod::Password);
+    let unknown = manager
+        .verify(std::slice::from_ref(&config), &[password_secrets()])
+        .await
+        .unwrap_err();
+    trust_all(&manager, unknown);
+    let endpoint = manager
+        .verify(&[config], &[password_secrets()])
+        .await
+        .unwrap();
+    assert_eq!(endpoint, format!("127.0.0.1:{}", server.port));
+    assert!(manager.sessions().is_empty());
+}
+
+#[tokio::test]
 async fn occupied_local_ports_are_reported() {
     let dir = tempfile::tempdir().unwrap();
     let server = TestServer::start(None).await;
