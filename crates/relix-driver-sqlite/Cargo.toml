@@ -1,0 +1,23 @@
+[package]
+name = "relix-driver-sqlite"
+description = "SQLite driver for the RELIX database IDE"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+relix-core.workspace = true
+relix-driver-api.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+rusqlite = { version = "0.40.2", default-features = false, features = ["bundled", "column_decltype"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+tokio.workspace = true
+
+[lints]
+workspace = true
