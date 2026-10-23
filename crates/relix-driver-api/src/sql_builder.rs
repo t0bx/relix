@@ -238,10 +238,17 @@ impl StatementWriter {
     }
 
     /// Emits a comparison that also treats two NULLs as equal. PostgreSQL compares the
-    /// textual form so that types without an equality operator (json, xml) still work.
+    /// textual form so that types without an equality operator (json, xml) still work;
+    /// numbers are compared by value instead, because the server may print floats in a
+    /// different (e.g. exponent) notation than the client.
     fn push_null_safe_equals(&mut self, column: &str, value: &Value) {
         let quoted = self.builder.dialect.quote_identifier(column);
         match self.builder.dialect {
+            Dialect::Postgres if value.is_numeric() => {
+                self.sql
+                    .push_str(&format!("{quoted} IS NOT DISTINCT FROM "));
+                self.push_value(value);
+            }
             Dialect::Postgres => {
                 self.sql
                     .push_str(&format!("{quoted}::text IS NOT DISTINCT FROM "));
@@ -393,6 +400,27 @@ mod tests {
             .delete(&table, &[("id".into(), Value::Int(3))])
             .unwrap();
         assert_eq!(delete.sql, "DELETE FROM `shop`.`orders` WHERE `id` = ?");
+    }
+
+    #[test]
+    fn postgres_numeric_guards_compare_by_value() {
+        let builder = SqlBuilder::new(Dialect::Postgres, ParamStyle::Inline);
+        let statement = builder
+            .update(
+                &users(),
+                &[("id".into(), Value::Int(1))],
+                &[CellChange {
+                    column: "score".into(),
+                    original: Value::Float(1e20),
+                    updated: Value::Float(2.5),
+                }],
+            )
+            .unwrap();
+        assert!(
+            statement
+                .sql
+                .ends_with("\"score\" IS NOT DISTINCT FROM '100000000000000000000'")
+        );
     }
 
     #[test]
