@@ -13,7 +13,6 @@ mod execution;
 mod introspection;
 mod managed_client;
 mod row_reader;
-mod statement_text;
 mod table_data;
 mod text_query;
 mod tls;

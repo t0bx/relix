@@ -3,16 +3,15 @@
  * @since 23.10.2026
  */
 
-use relix_core::StatementOutcome;
+use relix_core::{Dialect, StatementOutcome};
+use relix_query::top_level_words;
 
 const DATA_MODIFICATION_KEYWORDS: [&str; 5] = ["INSERT", "UPDATE", "DELETE", "REPLACE", "WITH"];
 
 pub fn outcome_without_rows(statement: &str, affected_rows: u64, info: &str) -> StatementOutcome {
-    let keyword = leading_keyword(statement);
-    if keyword
-        .as_deref()
-        .is_some_and(|keyword| DATA_MODIFICATION_KEYWORDS.contains(&keyword))
-    {
+    let words = top_level_words(statement, Dialect::MySql);
+    let keyword = words.first();
+    if keyword.is_some_and(|keyword| DATA_MODIFICATION_KEYWORDS.contains(&keyword)) {
         return StatementOutcome::Affected {
             rows: affected_rows,
         };
@@ -28,37 +27,22 @@ pub fn outcome_without_rows(statement: &str, affected_rows: u64, info: &str) -> 
     StatementOutcome::Completed { message }
 }
 
-/// Returns the first keyword of a statement in upper case, skipping whitespace, opening
-/// parentheses and `--`, `#` and `/* */` comments.
-pub fn leading_keyword(statement: &str) -> Option<String> {
-    let mut rest = statement;
-    loop {
-        rest = rest.trim_start_matches(|ch: char| ch.is_whitespace() || ch == '(');
-        if rest.starts_with("--") || rest.starts_with('#') {
-            rest = rest.split_once('\n').map_or("", |(_, tail)| tail);
-        } else if let Some(comment) = rest.strip_prefix("/*") {
-            rest = comment.split_once("*/").map_or("", |(_, tail)| tail);
-        } else {
-            break;
-        }
-    }
-    let keyword: String = rest.chars().take_while(char::is_ascii_alphabetic).collect();
-    (!keyword.is_empty()).then(|| keyword.to_ascii_uppercase())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn leading_keyword_skips_comments_and_parentheses() {
-        assert_eq!(leading_keyword("  select 1").as_deref(), Some("SELECT"));
+    fn comments_are_skipped_before_the_verb() {
         assert_eq!(
-            leading_keyword("-- note\n/* block */ # hash\n update t set a = 1").as_deref(),
-            Some("UPDATE")
+            outcome_without_rows("-- note\n/* block */ # hash\n update t set a = 1", 2, ""),
+            StatementOutcome::Affected { rows: 2 }
         );
-        assert_eq!(leading_keyword("(SELECT 1)").as_deref(), Some("SELECT"));
-        assert_eq!(leading_keyword("  ;"), None);
+        assert_eq!(
+            outcome_without_rows("  ;", 0, ""),
+            StatementOutcome::Completed {
+                message: "statement completed".into()
+            }
+        );
     }
 
     #[test]

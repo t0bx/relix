@@ -3,10 +3,12 @@
  * @since 23.10.2026
  */
 
+use relix_core::Dialect;
+use relix_query::top_level_words;
+
 const DATA_CHANGING_VERBS: [&str; 4] = ["INSERT", "UPDATE", "DELETE", "REPLACE"];
 const DDL_VERBS: [&str; 3] = ["CREATE", "DROP", "ALTER"];
 const DDL_OBJECTS: [&str; 4] = ["TABLE", "VIEW", "INDEX", "TRIGGER"];
-const INSPECTED_KEYWORDS: usize = 4;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct StatementKind {
@@ -16,7 +18,7 @@ pub(crate) struct StatementKind {
 impl StatementKind {
     pub(crate) fn of(sql: &str) -> Self {
         Self {
-            keywords: leading_keywords(sql, INSPECTED_KEYWORDS),
+            keywords: top_level_words(sql, Dialect::Sqlite).words,
         }
     }
 
@@ -44,34 +46,6 @@ impl StatementKind {
             .find(|word| DDL_OBJECTS.contains(&word.as_str()))
             .map_or_else(|| verb.clone(), |object| format!("{verb} {object}"))
     }
-}
-
-/// Collects up to `count` leading keywords (upper-cased), skipping whitespace,
-/// `-- line` and `/* block */` comments. Scanning stops at the first token that is
-/// not a bare word, e.g. a quoted identifier or a parenthesis.
-fn leading_keywords(sql: &str, count: usize) -> Vec<String> {
-    let mut keywords = Vec::new();
-    let mut rest = sql;
-    while keywords.len() < count {
-        rest = rest.trim_start_matches(|ch: char| ch.is_whitespace() || ch == ';');
-        if let Some(comment) = rest.strip_prefix("--") {
-            rest = comment.find('\n').map_or("", |end| &comment[end..]);
-            continue;
-        }
-        if let Some(comment) = rest.strip_prefix("/*") {
-            rest = comment.find("*/").map_or("", |end| &comment[end + 2..]);
-            continue;
-        }
-        let end = rest
-            .find(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
-            .unwrap_or(rest.len());
-        if end == 0 {
-            break;
-        }
-        keywords.push(rest[..end].to_ascii_uppercase());
-        rest = &rest[end..];
-    }
-    keywords
 }
 
 #[cfg(test)]

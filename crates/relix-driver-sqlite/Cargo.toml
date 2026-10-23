@@ -11,6 +11,7 @@ repository.workspace = true
 [dependencies]
 relix-core.workspace = true
 relix-driver-api.workspace = true
+relix-query = { path = "../relix-query" }
 async-trait.workspace = true
 tokio.workspace = true
 rusqlite = { version = "0.40.2", default-features = false, features = ["bundled", "column_decltype"] }

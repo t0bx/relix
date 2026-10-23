@@ -3,8 +3,8 @@
  * @since 23.10.2026
  */
 
-use crate::statement_text::StatementScan;
 use relix_core::StatementOutcome;
+use relix_query::TopLevelWords;
 
 const AFFECTING_VERBS: [&str; 5] = ["INSERT", "UPDATE", "DELETE", "MERGE", "COPY"];
 const ROW_RETURNING_VERBS: [&str; 12] = [
@@ -40,8 +40,8 @@ pub(crate) struct CommandInfo {
 impl CommandInfo {
     /// Reconstructs the command from the statement text, because the simple query protocol
     /// client only reports affected row counts and drops the server's command tag.
-    pub(crate) fn from_scan(scan: &StatementScan) -> Self {
-        let keywords = scan.keywords.as_slice();
+    pub(crate) fn from_words(statement: &TopLevelWords) -> Self {
+        let keywords = statement.words.as_slice();
         let verb = main_verb(keywords);
         let streams_copy_data = verb == "COPY"
             && keywords
@@ -121,10 +121,11 @@ fn object_command_tag(verb: &str, rest: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::statement_text::scan_statement;
+    use relix_core::Dialect;
+    use relix_query::top_level_words;
 
     fn info(sql: &str) -> CommandInfo {
-        CommandInfo::from_scan(&scan_statement(sql))
+        CommandInfo::from_words(&top_level_words(sql, Dialect::Postgres))
     }
 
     fn completed(message: &str) -> StatementOutcome {
