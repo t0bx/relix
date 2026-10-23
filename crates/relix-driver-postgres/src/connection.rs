@@ -3,6 +3,7 @@
  * @since 23.10.2026
  */
 
+use crate::cancel_signal::CancelSignal;
 use crate::connector::Connector;
 use crate::data_clients::DataClients;
 use crate::errors::{connection_closed, map_error};
@@ -23,6 +24,7 @@ pub struct PostgresConnection {
     pub(crate) default_database: String,
     pub(crate) builder: SqlBuilder,
     pub(crate) server_flavor: Flavor,
+    pub(crate) cancel_signal: CancelSignal,
     server_info: ServerInfo,
     session: Mutex<Option<Arc<ManagedClient>>>,
     cancel_token: CancelToken,
@@ -47,6 +49,7 @@ impl PostgresConnection {
             default_database: identity.database,
             builder: SqlBuilder::new(Dialect::Postgres, ParamStyle::Inline),
             server_flavor: identity.flavor,
+            cancel_signal: CancelSignal::default(),
             server_info: flavor.server_info(identity.flavor, &identity.version),
             session: Mutex::new(Some(Arc::new(session))),
             cancel_token,
@@ -64,6 +67,7 @@ impl PostgresConnection {
 
     pub(crate) async fn cancel_session(&self) -> Result<(), DriverError> {
         self.session().await?;
+        self.cancel_signal.request();
         self.connector.cancel(&self.cancel_token).await
     }
 

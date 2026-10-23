@@ -16,34 +16,67 @@ pub(crate) struct TextQueryResult {
     pub(crate) affected_rows: u64,
 }
 
+#[derive(Debug, Default)]
+pub(crate) struct Description {
+    column_types: Option<Vec<String>>,
+    prepare_error: Option<tokio_postgres::Error>,
+}
+
 /// Runs SQL through the simple query protocol so any statement is accepted, keeping at
 /// most `row_limit` rows of the last result set and draining the remainder without
-/// buffering it. With `describe`, the statement is prepared first to learn column types
-/// for typed values; when preparing fails the statement still runs, and if preparing
-/// aborted the surrounding transaction the original prepare error is reported instead.
+/// buffering it. With `describe`, column types are learned first (see [`describe`]).
 pub(crate) async fn run_text_query(
     client: &Client,
     sql: &str,
     row_limit: usize,
-    describe: bool,
+    describe_columns: bool,
 ) -> Result<TextQueryResult, tokio_postgres::Error> {
-    let (column_types, prepare_error) = if describe {
-        match client.prepare(sql).await {
-            Ok(statement) => (
-                Some(
-                    statement
-                        .columns()
-                        .iter()
-                        .map(|column| column.type_().name().to_owned())
-                        .collect::<Vec<_>>(),
-                ),
-                None,
-            ),
-            Err(error) => (None, Some(error)),
-        }
+    let description = if describe_columns {
+        describe(client, sql).await?
     } else {
-        (None, None)
+        Description::default()
     };
+    run_described(client, sql, row_limit, description).await
+}
+
+/// Prepares the statement to learn its column types for typed values. A failed prepare
+/// is kept so the statement still runs; only a cancel request that interrupted the
+/// prepare step fails the whole statement.
+pub(crate) async fn describe(
+    client: &Client,
+    sql: &str,
+) -> Result<Description, tokio_postgres::Error> {
+    match client.prepare(sql).await {
+        Ok(statement) => Ok(Description {
+            column_types: Some(
+                statement
+                    .columns()
+                    .iter()
+                    .map(|column| column.type_().name().to_owned())
+                    .collect(),
+            ),
+            prepare_error: None,
+        }),
+        Err(error) if error.code() == Some(&SqlState::QUERY_CANCELED) => Err(error),
+        Err(error) => Ok(Description {
+            column_types: None,
+            prepare_error: Some(error),
+        }),
+    }
+}
+
+/// Runs a statement described by [`describe`]; if preparing it aborted the surrounding
+/// transaction, the original prepare error is reported instead of the abort notice.
+pub(crate) async fn run_described(
+    client: &Client,
+    sql: &str,
+    row_limit: usize,
+    description: Description,
+) -> Result<TextQueryResult, tokio_postgres::Error> {
+    let Description {
+        column_types,
+        prepare_error,
+    } = description;
     match stream_rows(client, sql, row_limit, column_types.as_deref()).await {
         Err(error) if aborted_by_prepare(&error, prepare_error.as_ref()) => {
             Err(prepare_error.unwrap_or(error))
