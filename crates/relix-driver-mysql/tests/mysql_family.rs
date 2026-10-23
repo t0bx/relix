@@ -5,6 +5,9 @@
 
 #![allow(clippy::unwrap_used)]
 
+mod common;
+
+use common::Engine;
 use relix_core::{
     CellChange, ChangeSet, ObjectKind, RowChange, Secret, StatementOutcome, TableQuery, TableRef,
     TlsMode, Value,
@@ -13,33 +16,29 @@ use relix_driver_api::{
     DatabaseConnection, DatabaseDriver, ErrorKind, ExecuteOptions, SqlConnection,
 };
 use relix_driver_mysql::{MariaDbDriver, MySqlDriver};
-use relix_testing::integration::{TestEngine, integration_config, unique_name};
+use relix_testing::integration::unique_name;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-macro_rules! for_both_engines {
+macro_rules! for_each_engine {
     ($($test:ident),* $(,)?) => {
-        mod mysql {
+        for_each_engine!(@engine mysql, MySql, $($test),*);
+        for_each_engine!(@engine mariadb, MariaDb, $($test),*);
+        for_each_engine!(@engine tidb, TiDb, $($test),*);
+    };
+    (@engine $module:ident, $engine:ident, $($test:ident),*) => {
+        mod $module {
             $(
                 #[tokio::test(flavor = "multi_thread")]
                 async fn $test() {
-                    super::$test(super::TestEngine::MySql).await;
-                }
-            )*
-        }
-
-        mod mariadb {
-            $(
-                #[tokio::test(flavor = "multi_thread")]
-                async fn $test() {
-                    super::$test(super::TestEngine::MariaDb).await;
+                    super::$test(super::Engine::$engine).await;
                 }
             )*
         }
     };
 }
 
-for_both_engines!(
+for_each_engine!(
     connects_and_reports_server,
     rejects_wrong_password,
     fails_on_wrong_port,
@@ -59,10 +58,10 @@ struct Fixture {
 }
 
 impl Fixture {
-    async fn open(engine: TestEngine) -> Option<Self> {
-        let config = integration_config(engine)?;
+    async fn open(engine: Engine) -> Option<Self> {
+        let config = engine.config()?;
         let database = config.settings.database.clone()?;
-        let connection = driver_for(engine).connect(&config).await.unwrap();
+        let connection = engine.driver().connect(&config).await.unwrap();
         Some(Self {
             connection: Arc::from(connection),
             database,
@@ -110,20 +109,6 @@ impl Fixture {
     }
 }
 
-fn driver_for(engine: TestEngine) -> Box<dyn DatabaseDriver> {
-    match engine {
-        TestEngine::MariaDb => Box::new(MariaDbDriver::new()),
-        _ => Box::new(MySqlDriver::new()),
-    }
-}
-
-fn product_for(engine: TestEngine) -> &'static str {
-    match engine {
-        TestEngine::MariaDb => "MariaDB",
-        _ => "MySQL",
-    }
-}
-
 fn rows_of(outcome: StatementOutcome) -> relix_core::RowBatch {
     match outcome {
         StatementOutcome::Rows(batch) => batch,
@@ -131,12 +116,12 @@ fn rows_of(outcome: StatementOutcome) -> relix_core::RowBatch {
     }
 }
 
-async fn connects_and_reports_server(engine: TestEngine) {
+async fn connects_and_reports_server(engine: Engine) {
     let Some(fixture) = Fixture::open(engine).await else {
         return;
     };
     let info = fixture.connection.server_info();
-    assert_eq!(info.product, product_for(engine));
+    assert_eq!(info.product, engine.product());
     assert!(!info.version.is_empty());
     fixture.connection.ping().await.unwrap();
     fixture.connection.close().await.unwrap();
@@ -148,12 +133,12 @@ async fn connects_and_reports_server(engine: TestEngine) {
     assert_eq!(error.kind, ErrorKind::Connection);
 }
 
-async fn rejects_wrong_password(engine: TestEngine) {
-    let Some(mut config) = integration_config(engine) else {
+async fn rejects_wrong_password(engine: Engine) {
+    let Some(mut config) = engine.config() else {
         return;
     };
     config.password = Some(Secret::new("definitely-wrong"));
-    let error = match driver_for(engine).connect(&config).await {
+    let error = match engine.driver().connect(&config).await {
         Ok(_) => panic!("connection with a wrong password succeeded"),
         Err(error) => error,
     };
@@ -161,25 +146,25 @@ async fn rejects_wrong_password(engine: TestEngine) {
     assert!(!error.to_string().contains("definitely-wrong"));
 }
 
-async fn fails_on_wrong_port(engine: TestEngine) {
-    let Some(mut config) = integration_config(engine) else {
+async fn fails_on_wrong_port(engine: Engine) {
+    let Some(mut config) = engine.config() else {
         return;
     };
     config.settings.port = Some(1);
-    let error = match driver_for(engine).connect(&config).await {
+    let error = match engine.driver().connect(&config).await {
         Ok(_) => panic!("connection to a closed port succeeded"),
         Err(error) => error,
     };
     assert_eq!(error.kind, ErrorKind::Connection);
 }
 
-async fn negotiates_tls(engine: TestEngine) {
-    let Some(mut config) = integration_config(engine) else {
+async fn negotiates_tls(engine: Engine) {
+    let Some(mut config) = engine.config() else {
         return;
     };
     for mode in [TlsMode::Prefer, TlsMode::Require] {
         config.settings.tls.mode = mode;
-        let connection = driver_for(engine).connect(&config).await.unwrap();
+        let connection = engine.driver().connect(&config).await.unwrap();
         let outcome = connection
             .as_sql()
             .unwrap()
@@ -197,14 +182,14 @@ async fn negotiates_tls(engine: TestEngine) {
         connection.close().await.unwrap();
     }
     config.settings.tls.mode = TlsMode::VerifyFull;
-    let error = match driver_for(engine).connect(&config).await {
+    let error = match engine.driver().connect(&config).await {
         Ok(_) => panic!("self-signed test certificate passed full verification"),
         Err(error) => error,
     };
     assert_eq!(error.kind, ErrorKind::Tls);
 }
 
-async fn introspects_catalog(engine: TestEngine) {
+async fn introspects_catalog(engine: Engine) {
     let Some(fixture) = Fixture::open(engine).await else {
         return;
     };
@@ -235,12 +220,14 @@ async fn introspects_catalog(engine: TestEngine) {
             "CREATE VIEW `{view}` AS SELECT id, code FROM `{child}`"
         ))
         .await;
-    fixture
-        .run(&format!(
-            "CREATE PROCEDURE `{procedure}`() COMMENT 'touches' SELECT 1"
-        ))
-        .await;
-    if engine == TestEngine::MariaDb {
+    if engine.supports_routines() {
+        fixture
+            .run(&format!(
+                "CREATE PROCEDURE `{procedure}`() COMMENT 'touches' SELECT 1"
+            ))
+            .await;
+    }
+    if engine.supports_sequences() {
         fixture.run(&format!("CREATE SEQUENCE `{sequence}`")).await;
     }
 
@@ -264,11 +251,13 @@ async fn introspects_catalog(engine: TestEngine) {
         Some((ObjectKind::Table, Some("parents".into())))
     );
     assert_eq!(kind_of(&view), Some((ObjectKind::View, None)));
-    assert_eq!(
-        kind_of(&procedure),
-        Some((ObjectKind::Procedure, Some("touches".into())))
-    );
-    if engine == TestEngine::MariaDb {
+    if engine.supports_routines() {
+        assert_eq!(
+            kind_of(&procedure),
+            Some((ObjectKind::Procedure, Some("touches".into())))
+        );
+    }
+    if engine.supports_sequences() {
         assert_eq!(kind_of(&sequence), Some((ObjectKind::Sequence, None)));
     }
 
@@ -320,23 +309,32 @@ async fn introspects_catalog(engine: TestEngine) {
             .as_deref()
             .is_some_and(|definition| definition.contains("VIEW"))
     );
-    let procedure_object = objects
-        .iter()
-        .find(|object| object.object.name == procedure)
-        .unwrap();
-    let procedure_definition = sql.object_definition(procedure_object).await.unwrap();
-    assert!(procedure_definition.is_some_and(|definition| definition.contains("PROCEDURE")));
-
-    if engine == TestEngine::MariaDb {
+    if engine.supports_routines() {
+        let procedure_object = objects
+            .iter()
+            .find(|object| object.object.name == procedure)
+            .unwrap();
+        let procedure_definition = sql.object_definition(procedure_object).await.unwrap();
+        assert!(procedure_definition.is_some_and(|definition| definition.contains("PROCEDURE")));
+        fixture.run(&format!("DROP PROCEDURE `{procedure}`")).await;
+    }
+    if engine.supports_sequences() {
+        let sequence_object = objects
+            .iter()
+            .find(|object| object.object.name == sequence)
+            .unwrap();
+        let sequence_definition = sql.object_definition(sequence_object).await.unwrap();
+        assert!(
+            sequence_definition.is_some_and(|definition| definition.contains("CREATE SEQUENCE"))
+        );
         fixture.run(&format!("DROP SEQUENCE `{sequence}`")).await;
     }
-    fixture.run(&format!("DROP PROCEDURE `{procedure}`")).await;
     fixture.run(&format!("DROP VIEW `{view}`")).await;
     fixture.run(&format!("DROP TABLE `{child}`")).await;
     fixture.run(&format!("DROP TABLE `{parent}`")).await;
 }
 
-async fn executes_statements(engine: TestEngine) {
+async fn executes_statements(engine: Engine) {
     let Some(fixture) = Fixture::open(engine).await else {
         return;
     };
@@ -425,7 +423,7 @@ async fn executes_statements(engine: TestEngine) {
     fixture.run(&format!("DROP TABLE `{table}`")).await;
 }
 
-async fn keeps_session_state(engine: TestEngine) {
+async fn keeps_session_state(engine: Engine) {
     let Some(fixture) = Fixture::open(engine).await else {
         return;
     };
@@ -445,7 +443,7 @@ async fn keeps_session_state(engine: TestEngine) {
     fixture.run(&format!("DROP TABLE `{table}`")).await;
 }
 
-async fn paginates_and_counts(engine: TestEngine) {
+async fn paginates_and_counts(engine: Engine) {
     let Some(fixture) = Fixture::open(engine).await else {
         return;
     };
@@ -488,7 +486,7 @@ async fn paginates_and_counts(engine: TestEngine) {
     fixture.run(&format!("DROP TABLE `{name}`")).await;
 }
 
-async fn applies_changes_in_one_transaction(engine: TestEngine) {
+async fn applies_changes_in_one_transaction(engine: Engine) {
     let Some(fixture) = Fixture::open(engine).await else {
         return;
     };
@@ -524,7 +522,7 @@ async fn applies_changes_in_one_transaction(engine: TestEngine) {
     fixture.run(&format!("DROP TABLE `{name}`")).await;
 }
 
-async fn rolls_back_conflicting_changes(engine: TestEngine) {
+async fn rolls_back_conflicting_changes(engine: Engine) {
     let Some(fixture) = Fixture::open(engine).await else {
         return;
     };
@@ -563,7 +561,7 @@ async fn rolls_back_conflicting_changes(engine: TestEngine) {
     fixture.run(&format!("DROP TABLE `{name}`")).await;
 }
 
-async fn cancels_running_statement(engine: TestEngine) {
+async fn cancels_running_statement(engine: Engine) {
     let Some(fixture) = Fixture::open(engine).await else {
         return;
     };
@@ -595,17 +593,17 @@ async fn cancels_running_statement(engine: TestEngine) {
 async fn mismatched_driver_reports_actual_server() {
     for (engine, driver, expected) in [
         (
-            TestEngine::MySql,
+            Engine::MySql,
             Box::new(MariaDbDriver::new()) as Box<dyn DatabaseDriver>,
             "MySQL (connected via MariaDB driver)",
         ),
         (
-            TestEngine::MariaDb,
+            Engine::MariaDb,
             Box::new(MySqlDriver::new()),
             "MariaDB (connected via MySQL driver)",
         ),
     ] {
-        let Some(config) = integration_config(engine) else {
+        let Some(config) = engine.config() else {
             return;
         };
         let connection = driver.connect(&config).await.unwrap();
