@@ -3,7 +3,6 @@
  * @since 23.10.2026
  */
 
-mod cancel_signal;
 mod catalog;
 mod change_statements;
 mod connect;

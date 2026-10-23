@@ -6,8 +6,7 @@
 #![allow(dead_code, clippy::unwrap_used, clippy::expect_used)]
 
 use relix_core::{
-    ConnectionConfig, ConnectionSettings, Secret, StatementOutcome, TableRef, TlsMode,
-    TlsSettings,
+    ConnectionConfig, ConnectionSettings, Secret, StatementOutcome, TableRef, TlsMode, TlsSettings,
 };
 use relix_driver_api::{DatabaseConnection, DatabaseDriver, ExecuteOptions, SqlConnection};
 use relix_driver_cassandra::{CassandraDriver, ScyllaDbDriver};
@@ -118,7 +117,11 @@ pub async fn create_keyspace(connection: &dyn DatabaseConnection) -> String {
     );
     let options = ExecuteOptions::default();
     let with_vnodes = format!("{base} AND tablets = {{'enabled': false}}");
-    if sql(connection).execute(&with_vnodes, &options).await.is_err() {
+    if sql(connection)
+        .execute(&with_vnodes, &options)
+        .await
+        .is_err()
+    {
         run(connection, &base).await;
     }
     keyspace

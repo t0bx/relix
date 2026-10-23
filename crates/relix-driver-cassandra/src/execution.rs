@@ -7,7 +7,7 @@ use crate::connection::CassandraConnection;
 use crate::paged_query::{RowWindow, run_paged};
 use async_trait::async_trait;
 use relix_core::StatementOutcome;
-use relix_driver_api::{DriverError, ExecuteOptions, QueryExecutor};
+use relix_driver_api::{DriverError, ErrorKind, ExecuteOptions, QueryExecutor};
 
 #[async_trait]
 impl QueryExecutor for CassandraConnection {
@@ -28,7 +28,8 @@ impl QueryExecutor for CassandraConnection {
         let batch = self
             .cancel_signal
             .run(run_paged(&live.session, cql, window, self.query_timeout))
-            .await?;
+            .await
+            .map_err(explain_cancellation)?;
         Ok(match batch {
             Some(batch) => StatementOutcome::Rows(batch),
             None => StatementOutcome::Completed {
@@ -41,6 +42,16 @@ impl QueryExecutor for CassandraConnection {
         self.live().await?;
         self.cancel_signal.cancel();
         Ok(())
+    }
+}
+
+fn explain_cancellation(error: DriverError) -> DriverError {
+    if error.kind == ErrorKind::Cancelled {
+        error.with_detail(
+            "the CQL protocol cannot abort requests; the coordinator may still complete it",
+        )
+    } else {
+        error
     }
 }
 

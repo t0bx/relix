@@ -27,7 +27,9 @@ async fn pages_results_up_to_the_row_limit() {
     for seq in 0..25 {
         common::run(
             connection.as_ref(),
-            &format!("INSERT INTO {keyspace}.events (bucket, seq, payload) VALUES (1, {seq}, 'p{seq}')"),
+            &format!(
+                "INSERT INTO {keyspace}.events (bucket, seq, payload) VALUES (1, {seq}, 'p{seq}')"
+            ),
         )
         .await;
     }
@@ -194,7 +196,9 @@ async fn cancel_stops_waiting_for_a_running_statement() {
             common::sql(connection.as_ref())
                 .execute(
                     "SELECT * FROM system_schema.columns",
-                    &ExecuteOptions { row_limit: 1_000_000 },
+                    &ExecuteOptions {
+                        row_limit: 1_000_000,
+                    },
                 )
                 .await
         })

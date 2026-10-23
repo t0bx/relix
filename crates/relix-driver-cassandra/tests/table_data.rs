@@ -54,7 +54,10 @@ async fn pages_skip_rows_without_offset_support() {
     let sql = common::sql(connection.as_ref());
     let keyspace = fixture(connection.as_ref()).await;
     let table = common::table_ref(&keyspace, "items");
-    let first = sql.fetch_table_page(&table, &query(None, 0, 10)).await.unwrap();
+    let first = sql
+        .fetch_table_page(&table, &query(None, 0, 10))
+        .await
+        .unwrap();
     assert_eq!(first.rows.len(), 10);
     assert!(first.has_more);
     assert_eq!(
@@ -66,7 +69,10 @@ async fn pages_skip_rows_without_offset_support() {
             Value::Text("row 1".into())
         ]
     );
-    let last = sql.fetch_table_page(&table, &query(None, 20, 10)).await.unwrap();
+    let last = sql
+        .fetch_table_page(&table, &query(None, 20, 10))
+        .await
+        .unwrap();
     assert_eq!(last.rows.len(), 5);
     assert!(!last.has_more);
     assert_eq!(last.rows[0][1], Value::Int(21));
@@ -80,13 +86,23 @@ async fn pages_skip_rows_without_offset_support() {
     assert_eq!(descending.rows[0][1], Value::Int(25));
 
     let filtered = query(Some("flag = true ALLOW FILTERING"), 0, 50);
-    assert_eq!(sql.fetch_table_page(&table, &filtered).await.unwrap().rows.len(), 12);
+    assert_eq!(
+        sql.fetch_table_page(&table, &filtered)
+            .await
+            .unwrap()
+            .rows
+            .len(),
+        12
+    );
     let refused = sql
         .fetch_table_page(&table, &query(Some("flag = true"), 0, 50))
         .await
         .unwrap_err();
     assert_eq!(refused.kind, ErrorKind::Query, "{refused}");
-    assert!(refused.message.to_uppercase().contains("ALLOW FILTERING"), "{refused}");
+    assert!(
+        refused.message.to_uppercase().contains("ALLOW FILTERING"),
+        "{refused}"
+    );
 
     assert_eq!(sql.count_rows(&table, None).await.unwrap(), 25);
     assert_eq!(
@@ -108,7 +124,12 @@ async fn applies_conditional_changes_statement_by_statement() {
     let sql = common::sql(connection.as_ref());
     let keyspace = fixture(connection.as_ref()).await;
     let table = common::table_ref(&keyspace, "items");
-    let key = |seq: i64| vec![("bucket".to_owned(), Value::Int(1)), ("seq".to_owned(), Value::Int(seq))];
+    let key = |seq: i64| {
+        vec![
+            ("bucket".to_owned(), Value::Int(1)),
+            ("seq".to_owned(), Value::Int(seq)),
+        ]
+    };
     let changes = ChangeSet {
         table: table.clone(),
         changes: vec![
@@ -171,7 +192,13 @@ async fn applies_conditional_changes_statement_by_statement() {
     let error = sql.apply_changes(&stale).await.unwrap_err();
     assert_eq!(error.kind, ErrorKind::ConcurrentModification, "{error}");
     assert!(error.message.starts_with("change #2 (update)"), "{error}");
-    assert!(error.detail.as_deref().unwrap().contains("1 earlier change(s)"));
+    assert!(
+        error
+            .detail
+            .as_deref()
+            .unwrap()
+            .contains("1 earlier change(s)")
+    );
     let saved = sql
         .fetch_table_page(&table, &query(Some("bucket = 1 AND seq = 3"), 0, 5))
         .await
@@ -181,7 +208,10 @@ async fn applies_conditional_changes_statement_by_statement() {
     let duplicate = ChangeSet {
         table: table.clone(),
         changes: vec![RowChange::Insert {
-            values: vec![("bucket".into(), Value::Int(1)), ("seq".into(), Value::Int(100))],
+            values: vec![
+                ("bucket".into(), Value::Int(1)),
+                ("seq".into(), Value::Int(100)),
+            ],
         }],
     };
     let error = sql.apply_changes(&duplicate).await.unwrap_err();
@@ -224,8 +254,14 @@ async fn counter_tables_are_not_edited_in_the_grid() {
     )
     .await;
     let table = common::table_ref(&keyspace, "hits");
-    let page = sql.fetch_table_page(&table, &query(None, 0, 10)).await.unwrap();
-    assert_eq!(page.rows[0], vec![Value::Text("home".into()), Value::Int(3)]);
+    let page = sql
+        .fetch_table_page(&table, &query(None, 0, 10))
+        .await
+        .unwrap();
+    assert_eq!(
+        page.rows[0],
+        vec![Value::Text("home".into()), Value::Int(3)]
+    );
     let changes = ChangeSet {
         table,
         changes: vec![RowChange::Delete {

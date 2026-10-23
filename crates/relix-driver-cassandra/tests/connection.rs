@@ -30,7 +30,12 @@ async fn wrong_password_is_an_authentication_error() {
         return;
     };
     config.password = Some(Secret::new("definitely-wrong"));
-    let error = Engine::current().driver().connect(&config).await.err().unwrap();
+    let error = Engine::current()
+        .driver()
+        .connect(&config)
+        .await
+        .err()
+        .unwrap();
     assert_eq!(error.kind, ErrorKind::Authentication, "{error}");
     assert!(!error.to_string().contains("definitely-wrong"));
 }
@@ -42,7 +47,12 @@ async fn unreachable_port_is_a_connection_error() {
     };
     config.settings.port = Some(1);
     config.settings.connect_timeout_secs = 5;
-    let error = Engine::current().driver().connect(&config).await.err().unwrap();
+    let error = Engine::current()
+        .driver()
+        .connect(&config)
+        .await
+        .err()
+        .unwrap();
     assert!(
         matches!(error.kind, ErrorKind::Connection | ErrorKind::Timeout),
         "{error}"
@@ -59,7 +69,12 @@ async fn tls_modes_are_honoured_against_a_plain_text_server() {
     connection.ping().await.unwrap();
     connection.close().await.unwrap();
     config.settings.tls.mode = TlsMode::Require;
-    let error = Engine::current().driver().connect(&config).await.err().unwrap();
+    let error = Engine::current()
+        .driver()
+        .connect(&config)
+        .await
+        .err()
+        .unwrap();
     assert_eq!(error.kind, ErrorKind::Tls, "{error}");
 }
 
@@ -101,11 +116,19 @@ async fn configured_keyspace_becomes_the_session_default() {
     )
     .await;
     let databases = common::sql(connection.as_ref()).databases().await.unwrap();
-    let default = databases.iter().find(|database| database.is_default).unwrap();
+    let default = databases
+        .iter()
+        .find(|database| database.is_default)
+        .unwrap();
     assert_eq!(default.name, keyspace);
     let mut missing = config.clone();
     missing.settings.database = Some("relix_missing_keyspace".into());
-    let error = Engine::current().driver().connect(&missing).await.err().unwrap();
+    let error = Engine::current()
+        .driver()
+        .connect(&missing)
+        .await
+        .err()
+        .unwrap();
     assert_eq!(error.kind, ErrorKind::Configuration, "{error}");
     connection.close().await.unwrap();
     common::drop_keyspace(setup.as_ref(), &keyspace).await;

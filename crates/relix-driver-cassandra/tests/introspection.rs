@@ -42,10 +42,16 @@ async fn browses_keyspaces_tables_views_columns_and_indexes() {
     .await;
 
     let databases = sql.databases().await.unwrap();
-    let names: Vec<&str> = databases.iter().map(|database| database.name.as_str()).collect();
+    let names: Vec<&str> = databases
+        .iter()
+        .map(|database| database.name.as_str())
+        .collect();
     assert!(names.contains(&keyspace.as_str()));
     assert!(names.contains(&"system_schema"));
-    let first_system = names.iter().position(|name| name.starts_with("system")).unwrap();
+    let first_system = names
+        .iter()
+        .position(|name| name.starts_with("system"))
+        .unwrap();
     assert!(names[..first_system].contains(&keyspace.as_str()));
     assert!(sql.schemas(&keyspace).await.unwrap().is_empty());
 
@@ -62,7 +68,11 @@ async fn browses_keyspaces_tables_views_columns_and_indexes() {
         .unwrap();
     assert_eq!(view.kind, ObjectKind::MaterializedView);
     assert_eq!(view.comment.as_deref(), Some("view of orders"));
-    assert_eq!(objects.len(), 2, "index backing views must be hidden: {objects:?}");
+    assert_eq!(
+        objects.len(),
+        2,
+        "index backing views must be hidden: {objects:?}"
+    );
 
     let details = sql.table_details(&table.object).await.unwrap();
     let columns: Vec<(&str, &str, bool, Option<&str>)> = details
@@ -105,7 +115,10 @@ async fn browses_keyspaces_tables_views_columns_and_indexes() {
     assert_eq!(view_details.kind, ObjectKind::MaterializedView);
     assert_eq!(view_details.primary_key[0], "total");
     let view_definition = sql.object_definition(view).await.unwrap().unwrap();
-    assert!(view_definition.contains("MATERIALIZED VIEW"), "{view_definition}");
+    assert!(
+        view_definition.contains("MATERIALIZED VIEW"),
+        "{view_definition}"
+    );
 
     let missing = relix_core::TableRef::new(Some(keyspace.clone()), None, "missing");
     assert!(sql.table_details(&missing).await.is_err());

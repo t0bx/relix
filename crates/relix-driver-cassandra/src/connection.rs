@@ -3,13 +3,12 @@
  * @since 23.10.2026
  */
 
-use crate::cancel_signal::CancelSignal;
 use crate::connect::{LiveSession, configured_keyspace, open_session};
 use crate::errors::{connection_closed, map_execution_error};
 use crate::product::detect_server;
 use async_trait::async_trait;
 use relix_core::ConnectionConfig;
-use relix_driver_api::{DatabaseConnection, DriverError, ServerInfo, SqlConnection};
+use relix_driver_api::{CancelSignal, DatabaseConnection, DriverError, ServerInfo, SqlConnection};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
