@@ -74,6 +74,31 @@ impl ConnectionTarget {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ConnectionProperty {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub required: bool,
+}
+
+impl ConnectionProperty {
+    pub const fn optional(name: &'static str, description: &'static str) -> Self {
+        Self {
+            name,
+            description,
+            required: false,
+        }
+    }
+
+    pub const fn required(name: &'static str, description: &'static str) -> Self {
+        Self {
+            name,
+            description,
+            required: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DependencyStatus {
     Ready,
@@ -101,6 +126,10 @@ pub trait DatabaseDriver: Send + Sync {
 
     fn dependency_status(&self) -> DependencyStatus {
         DependencyStatus::Ready
+    }
+
+    fn connection_properties(&self) -> Vec<ConnectionProperty> {
+        Vec::new()
     }
 
     async fn connect(
