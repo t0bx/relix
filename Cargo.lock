@@ -5529,6 +5529,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "relix-driver-trino"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "relix-core",
+ "relix-driver-api",
+ "relix-driver-http",
+ "relix-query",
+ "relix-testing",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "relix-editor"
 version = "0.1.0"
 dependencies = [
