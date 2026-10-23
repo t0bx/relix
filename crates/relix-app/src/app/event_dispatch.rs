@@ -21,7 +21,10 @@ impl App {
                 request,
                 result,
             } => self.on_connected(source, request, result),
-            AppEvent::ConnectionTested { result } => self.on_connection_tested(result),
+            AppEvent::ConnectionTested { result, plan } => self.on_connection_tested(result, plan),
+            AppEvent::SshTested { plan, result } => self.on_ssh_tested(plan, result),
+            AppEvent::VpnDiagnosed { profile, lines } => self.on_vpn_diagnosed(profile, lines),
+            AppEvent::VpnUpdated { profile, result } => self.on_vpn_updated(profile, result),
             AppEvent::DriverOffer {
                 source,
                 driver,

@@ -8,8 +8,9 @@ use crate::requests::RequestId;
 use crate::services::InstallOffer;
 use crate::workspace::TabId;
 use relix_config::KeyChord;
+use relix_connections::{ConnectionError, NetworkPlan, VpnError};
 use relix_core::keyvalue::{CommandReply, KeyDescription, KeyName, KeyScanPage, ValuePage};
-use relix_core::{ChangeReport, DataSourceId, DriverId, RowBatch, TableDetails};
+use relix_core::{ChangeReport, DataSourceId, DriverId, RowBatch, ServerConfigId, TableDetails};
 use relix_driver_api::{DatabaseConnection, DriverError, ServerInfo};
 use relix_editor::{CatalogColumn, CompletionCatalog};
 use relix_query::{ScriptOutcome, StatementReport};
@@ -41,10 +42,23 @@ pub enum AppEvent {
     Connected {
         source: DataSourceId,
         request: RequestId,
-        result: Result<Arc<dyn DatabaseConnection>, DriverError>,
+        result: Result<Arc<dyn DatabaseConnection>, ConnectionError>,
     },
     ConnectionTested {
-        result: Result<ServerInfo, DriverError>,
+        result: Result<(ServerInfo, String), ConnectionError>,
+        plan: Option<NetworkPlan>,
+    },
+    SshTested {
+        plan: NetworkPlan,
+        result: Result<String, ConnectionError>,
+    },
+    VpnDiagnosed {
+        profile: ServerConfigId,
+        lines: Vec<String>,
+    },
+    VpnUpdated {
+        profile: ServerConfigId,
+        result: Result<String, VpnError>,
     },
     DriverOffer {
         source: DataSourceId,

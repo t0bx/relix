@@ -4,13 +4,15 @@
  */
 
 use super::App;
-use crate::datasource_form::{DataSourceForm, FormStatus};
+use crate::datasource_form::DataSourceForm;
+use crate::form::FormStatus;
 use crate::notifications::Level;
 use crate::overlay::{ConfirmState, Overlay, PendingAction};
 use crate::tab::Tab;
 use crate::workspace::TabId;
+use relix_connections::{ConnectionError, NetworkPlan};
 use relix_core::{DataSourceDefinition, DataSourceId, Secret};
-use relix_driver_api::{DriverError, ServerInfo};
+use relix_driver_api::ServerInfo;
 
 impl App {
     pub(crate) fn open_data_source_form(&mut self, existing: Option<DataSourceId>) {
@@ -28,6 +30,7 @@ impl App {
             .push(Overlay::DataSourceForm(Box::new(DataSourceForm::new(
                 drivers,
                 definition.as_ref(),
+                self.server_choices(),
             ))));
     }
 
@@ -50,6 +53,7 @@ impl App {
                 .push(Overlay::DataSourceForm(Box::new(DataSourceForm::new(
                     self.context.drivers.descriptors(),
                     Some(&definition),
+                    self.server_choices(),
                 ))));
             return;
         }
@@ -93,17 +97,21 @@ impl App {
         }
     }
 
-    pub(crate) fn on_connection_tested(&mut self, result: Result<ServerInfo, DriverError>) {
-        let status = match result {
-            Ok(info) => FormStatus {
-                message: format!("✓ connected: {} {}", info.product, info.version),
-                success: true,
-            },
-            Err(error) => FormStatus {
-                message: format!("✗ {error}"),
-                success: false,
-            },
+    pub(crate) fn on_connection_tested(
+        &mut self,
+        result: Result<(ServerInfo, String), ConnectionError>,
+        plan: Option<NetworkPlan>,
+    ) {
+        let status = match &result {
+            Ok((info, route)) => FormStatus::success(format!(
+                "✓ connected {route}: {} {}",
+                info.product, info.version
+            )),
+            Err(error) => FormStatus::failure(format!("✗ {} — {error}", error.stage())),
         };
+        if let Err(error) = &result {
+            self.handle_network_failure(None, plan.as_ref(), error);
+        }
         let form = self
             .overlays
             .iter_mut()
@@ -113,10 +121,7 @@ impl App {
                 _ => None,
             });
         match form {
-            Some(form) => {
-                form.testing = false;
-                form.status = Some(status);
-            }
+            Some(form) => form.set_status(status, false),
             None => self.notify(
                 if status.success {
                     Level::Success

@@ -3,6 +3,7 @@
  * @since 23.10.2026
  */
 
+use super::network_credentials::{load_secret, resolve_credentials};
 use super::{App, Focus};
 use crate::events::AppEvent;
 use crate::notifications::Level;
@@ -11,11 +12,12 @@ use crate::requests::RequestId;
 use crate::services::InstallOffer;
 use crate::tab::Tab;
 use crate::workspace::TabId;
+use relix_connections::{ConnectionError, NetworkPlan, plan_network};
 use relix_core::{ConnectionConfig, DataSourceDefinition, DataSourceId, Dialect, DriverId, Secret};
 use relix_driver_api::{
-    DatabaseConnection, DriverCapabilities, DriverError, ErrorKind, ServerInfo,
+    DatabaseConnection, DatabaseDriver, DriverCapabilities, DriverError, ErrorKind, ServerInfo,
 };
-use relix_project::{SecretKey, SecretStore};
+use relix_project::SecretKey;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,6 +26,12 @@ pub enum ConnectionStatus {
     Connecting,
     Connected,
     Failed(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectionIndicator {
+    pub label: String,
+    pub degraded: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,6 +48,7 @@ pub struct ConnectionState {
     pub server: Option<ServerInfo>,
     pub(crate) request: Option<RequestId>,
     pub(crate) deferred: Vec<Deferred>,
+    pub(crate) plan: Option<NetworkPlan>,
 }
 
 impl Default for ConnectionState {
@@ -50,6 +59,7 @@ impl Default for ConnectionState {
             server: None,
             request: None,
             deferred: Vec::new(),
+            plan: None,
         }
     }
 }
@@ -63,6 +73,33 @@ impl App {
         self.connections
             .get(&id)
             .map_or(ConnectionStatus::Disconnected, |state| state.status.clone())
+    }
+
+    /// Describes how a data source is reached for the explorer: the route of a live
+    /// connection (directly, via SSH, via VPN) and whether its tunnel is degraded, or
+    /// the configured route while connecting.
+    pub fn connection_indicator(&self, id: DataSourceId) -> Option<ConnectionIndicator> {
+        let state = self.connections.get(&id)?;
+        let route = state
+            .handle
+            .as_ref()
+            .and_then(|handle| handle.network_route())
+            .or_else(|| state.plan.as_ref().map(NetworkPlan::describe))
+            .unwrap_or_else(|| "directly".into());
+        let tunnel = state
+            .handle
+            .as_ref()
+            .and_then(|handle| handle.network_status());
+        let (label, degraded) = match (&state.status, tunnel) {
+            (ConnectionStatus::Connected, Some(status)) if status != "connected" => {
+                (format!("{route} · {status}"), true)
+            }
+            (ConnectionStatus::Connected, _) => (format!("connected {route}"), false),
+            (ConnectionStatus::Connecting, _) => (format!("connecting {route}…"), false),
+            (ConnectionStatus::Failed(_), _) => ("failed".into(), true),
+            (ConnectionStatus::Disconnected, _) => return None,
+        };
+        Some(ConnectionIndicator { label, degraded })
     }
 
     pub(crate) fn connection(&self, id: DataSourceId) -> Option<Arc<dyn DatabaseConnection>> {
@@ -121,6 +158,15 @@ impl App {
             self.offer_driver_install(source, definition.driver.clone());
             return;
         };
+        let plan = match self.network_plan(&definition, driver.as_ref()) {
+            Ok(plan) => plan,
+            Err(error) => {
+                self.connections.entry(source).or_default().status =
+                    ConnectionStatus::Failed(error.to_string());
+                self.notify(Level::Error, format!("{}: {error}", definition.name));
+                return;
+            }
+        };
         let session_password = self.session_passwords.get(&source).cloned();
         if session_password.is_none()
             && !definition.settings.save_password
@@ -130,21 +176,27 @@ impl App {
             return;
         }
         let request = self.next_request();
+        let credentials = self.credential_sources(&plan);
         let state = self.connections.entry(source).or_default();
         state.status = ConnectionStatus::Connecting;
         state.request = Some(request);
+        state.plan = Some(plan.clone());
         let secrets = self.context.secrets.clone();
+        let network = self.context.network.clone();
         let key = self.secret_key(source);
         let save_password = definition.settings.save_password;
-        self.status = format!("connecting to {}…", definition.name);
+        self.status = format!("connecting to {} {}…", definition.name, plan.describe());
         self.spawn(async move {
             let password = match (session_password, key) {
                 (Some(password), _) => Some(password),
-                (None, Some(key)) if save_password => load_secret(secrets, key).await,
+                (None, Some(key)) if save_password => load_secret(secrets.clone(), key).await,
                 _ => None,
             };
+            let credentials = resolve_credentials(secrets, credentials).await;
             let config = ConnectionConfig::new(definition.settings, password);
-            let result = driver.connect(&config).await.map(Arc::from);
+            let result = network
+                .connect(driver.as_ref(), &config, &plan, &credentials)
+                .await;
             AppEvent::Connected {
                 source,
                 request,
@@ -153,16 +205,25 @@ impl App {
         });
     }
 
+    fn network_plan(
+        &self,
+        definition: &DataSourceDefinition,
+        driver: &dyn DatabaseDriver,
+    ) -> Result<NetworkPlan, ConnectionError> {
+        let metadata = driver.metadata();
+        plan_network(
+            definition,
+            &self.servers,
+            metadata.target,
+            &metadata.display_name,
+        )
+    }
+
     fn requires_password(&self, definition: &DataSourceDefinition) -> bool {
         self.context
             .drivers
             .driver(&definition.driver)
-            .is_some_and(|driver| {
-                matches!(
-                    driver.metadata().target,
-                    relix_driver_api::ConnectionTarget::Network { .. }
-                )
-            })
+            .is_some_and(|driver| driver.metadata().target.is_network())
     }
 
     pub(crate) fn secret_key(&self, source: DataSourceId) -> Option<SecretKey> {
@@ -195,7 +256,7 @@ impl App {
         &mut self,
         source: DataSourceId,
         request: RequestId,
-        result: Result<Arc<dyn DatabaseConnection>, DriverError>,
+        result: Result<Arc<dyn DatabaseConnection>, ConnectionError>,
     ) {
         let name = self
             .data_source(source)
@@ -229,7 +290,7 @@ impl App {
                 self.resume_deferred(deferred);
                 self.resume_explorer_expansions();
             }
-            Err(error) => {
+            Err(ConnectionError::Driver(error)) => {
                 let deferred_tabs: Vec<TabId> = state
                     .deferred
                     .drain(..)
@@ -251,6 +312,19 @@ impl App {
                 }
                 self.status = format!("connection to {name} failed");
                 self.notify(Level::Error, format!("{name}: {error}"));
+            }
+            Err(error) => {
+                let plan = state.plan.clone();
+                state.status = ConnectionStatus::Failed(error.to_string());
+                let driver_error = error.clone().into_driver_error();
+                if !self.handle_network_failure(Some(source), plan.as_ref(), &error) {
+                    if let Some(state) = self.connections.get_mut(&source) {
+                        state.deferred.clear();
+                    }
+                    self.explorer_connection_failed(source, &driver_error);
+                    self.notify(Level::Error, format!("{name} ({}): {error}", error.stage()));
+                }
+                self.status = format!("connection to {name} failed");
             }
         }
     }
@@ -404,34 +478,39 @@ impl App {
             );
             return;
         };
+        let plan = match self.network_plan(&definition, driver.as_ref()) {
+            Ok(plan) => plan,
+            Err(error) => {
+                self.spawn(async move {
+                    AppEvent::ConnectionTested {
+                        result: Err(error),
+                        plan: None,
+                    }
+                });
+                return;
+            }
+        };
+        let credentials = self.credential_sources(&plan);
         let secrets = self.context.secrets.clone();
+        let network = self.context.network.clone();
         let key = self.secret_key(definition.id);
         self.spawn(async move {
             let password = match (password, key) {
                 (Some(password), _) => Some(password),
-                (None, Some(key)) => load_secret(secrets, key).await,
+                (None, Some(key)) => load_secret(secrets.clone(), key).await,
                 (None, None) => None,
             };
+            let credentials = resolve_credentials(secrets, credentials).await;
             let config = ConnectionConfig::new(definition.settings, password);
-            let result = async {
-                let connection = driver.connect(&config).await?;
-                connection.ping().await?;
-                let info = connection.server_info();
-                let _ = connection.close().await;
-                Ok(info)
+            let result = network
+                .test(driver.as_ref(), &config, &plan, &credentials)
+                .await;
+            AppEvent::ConnectionTested {
+                result,
+                plan: Some(plan),
             }
-            .await;
-            AppEvent::ConnectionTested { result }
         });
     }
-}
-
-async fn load_secret(secrets: Arc<dyn SecretStore>, key: SecretKey) -> Option<Secret> {
-    tokio::task::spawn_blocking(move || secrets.get(&key))
-        .await
-        .ok()
-        .and_then(Result::ok)
-        .flatten()
 }
 
 pub fn human_size(bytes: u64) -> String {

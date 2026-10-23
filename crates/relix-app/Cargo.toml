@@ -10,6 +10,7 @@ repository.workspace = true
 
 [dependencies]
 relix-config.workspace = true
+relix-connections = { path = "../relix-connections" }
 relix-core.workspace = true
 relix-driver-api.workspace = true
 relix-editor = { path = "../relix-editor" }
@@ -33,7 +34,7 @@ test-support = ["dep:relix-driver-sqlite", "dep:relix-testing"]
 [dev-dependencies]
 pretty_assertions.workspace = true
 relix-driver-sqlite = { path = "../relix-driver-sqlite" }
-relix-testing.workspace = true
+relix-testing = { workspace = true, features = ["ssh"] }
 tempfile = "3.27.0"
 
 [lints]

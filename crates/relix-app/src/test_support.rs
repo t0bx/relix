@@ -9,6 +9,7 @@ use crate::events::{AppEvent, InputEvent};
 use crate::services::{DriverService, MemoryClipboard, StaticDriverService};
 use crate::tab::Tab;
 use relix_config::{AppPaths, GlobalSettings, KeyChord, KeyCode, ThemeCatalog};
+use relix_connections::{ConnectionManager, HostKeyStore, TunnelManager, VpnManager};
 use relix_core::{DataSourceDefinition, DataSourceId, DriverId, Environment};
 use relix_driver_api::DatabaseDriver;
 use relix_driver_sqlite::SqliteDriver;
@@ -40,11 +41,16 @@ impl AppHarness {
             panic!("cannot prepare test directories: {error}");
         }
         let (sender, events) = mpsc::channel(EVENT_QUEUE_CAPACITY);
+        let network = ConnectionManager::new(
+            TunnelManager::new(HostKeyStore::isolated(paths.known_hosts_file())),
+            VpnManager::system(paths.vpn_runtime_dir()),
+        );
         let context = AppContext {
             store: ProjectStore::new(paths.projects_dir()),
             paths,
             secrets: Arc::new(MemorySecretStore::default()),
             drivers,
+            network,
             clipboard: Box::new(MemoryClipboard::default()),
             runtime: tokio::runtime::Handle::current(),
             events: sender,
