@@ -80,3 +80,24 @@ services:
       test: ["CMD-SHELL", "curl -s localhost:9200/_cluster/health | grep -q status"]
       interval: 3s
       retries: 60
+  mongodb:
+    image: mongo:8
+    command: ["--wiredTigerCacheSizeGB", "0.25"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: relix
+      MONGO_INITDB_ROOT_PASSWORD: relix_test
+    ports:
+      - "57017:27017"
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "-u", "relix", "-p", "relix_test", "--eval", "db.runCommand({ping:1}).ok"]
+      interval: 2s
+      retries: 30
+  dynamodb:
+    image: amazon/dynamodb-local
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx256m
+    ports:
+      - "58000:8000"
+    mem_limit: 512m

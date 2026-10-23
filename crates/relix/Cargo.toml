@@ -23,6 +23,8 @@ relix-connections = { path = "../relix-connections" }
 relix-core.workspace = true
 relix-driver-api.workspace = true
 relix-driver-manager = { path = "../relix-driver-manager" }
+relix-driver-dynamodb = { path = "../relix-driver-dynamodb" }
+relix-driver-mongodb = { path = "../relix-driver-mongodb" }
 relix-driver-mysql = { path = "../relix-driver-mysql" }
 relix-driver-postgres = { path = "../relix-driver-postgres" }
 relix-driver-redis = { path = "../relix-driver-redis" }
