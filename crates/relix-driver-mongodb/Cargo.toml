@@ -1,0 +1,32 @@
+[package]
+name = "relix-driver-mongodb"
+description = "Native MongoDB document driver for the RELIX database IDE"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+relix-core.workspace = true
+relix-driver-api.workspace = true
+async-trait.workspace = true
+futures-util = { version = "0.3.31", default-features = false, features = ["std"] }
+mongodb = { version = "3.9.1", default-features = false, features = [
+    "compat-3-0-0",
+    "rustls-tls",
+    "dns-resolver",
+] }
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["sync", "time"] }
+uuid.workspace = true
+
+[dev-dependencies]
+relix-testing = { path = "../relix-testing" }
+pretty_assertions.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true
