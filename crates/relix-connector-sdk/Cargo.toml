@@ -1,0 +1,33 @@
+[package]
+name = "relix-connector-sdk"
+description = "SDK for building external RELIX connectors, plus the reference CSV connector"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "relix-csv-connector"
+path = "src/bin/relix-csv-connector/main.rs"
+
+[dependencies]
+relix-core.workspace = true
+relix-driver-api.workspace = true
+relix-driver-sqlite = { path = "../relix-driver-sqlite" }
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["io-std"] }
+csv = "1.4.0"
+
+[dev-dependencies]
+relix-driver-manager = { path = "../relix-driver-manager" }
+pretty_assertions.workspace = true
+tempfile = "3.27.0"
+tokio.workspace = true
+
+[lints]
+workspace = true
