@@ -203,3 +203,32 @@ async fn data_source_dialog_offers_network_modes() {
     assert!(dialog.contains("Properties"));
     assert!(!dialog.contains("SSH config"));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn document_browser_shows_filter_documents_and_json() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = relix_testing::mock_document::MockDocumentDriver::with_collection(
+        "orders",
+        vec![serde_json::json!({"_id": 1, "customer": "ada", "total": 42})],
+    );
+    let mut harness = AppHarness::new(dir.path(), vec![Arc::new(store)]);
+    harness.app.startup(Some("Shop"));
+    let source = harness.add_data_source(DataSourceDefinition::new(
+        "Mongo",
+        DriverId::from("mock-doc"),
+    ));
+    harness.app.focus = Focus::Sidebar;
+    let root = harness.app.explorer.root_for(source).unwrap();
+    harness.app.explorer.select_node(root);
+    harness.keys("enter");
+    harness.settle().await;
+    harness.keys("j enter");
+    harness.settle().await;
+    harness.keys("j enter");
+    harness.settle().await;
+    let screen = render(&mut harness, 140, 30);
+    println!("{screen}");
+    assert!(screen.contains("FILTER"));
+    assert!(screen.contains("\"customer\": \"ada\""));
+    assert!(screen.contains("page 1 · 1 documents of 1"));
+}

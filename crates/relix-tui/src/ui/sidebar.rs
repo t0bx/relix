@@ -241,6 +241,8 @@ fn icon(kind: &NodeKind, app: &App, ui: &UiState) -> (&'static str, ratatui::sty
         NodeKind::Index(_) => (pick("↯", "i"), styles.muted),
         NodeKind::ForeignKey(_) => (pick("⇢", ">"), styles.info),
         NodeKind::KeySpace(_) => (pick("⚿", "K"), styles.accent),
+        NodeKind::Namespace { .. } => (pick("◫", "D"), styles.accent),
+        NodeKind::Collection { .. } => (pick("❏", "C"), styles.accent_secondary),
         NodeKind::Message(_) => ("!", styles.error),
     }
 }

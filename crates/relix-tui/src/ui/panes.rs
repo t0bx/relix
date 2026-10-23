@@ -5,7 +5,7 @@
 
 use super::UiState;
 use super::widgets::{bold, panel, put, to_area};
-use super::{editor, keyvalue, table};
+use super::{document, editor, keyvalue, table};
 use crate::text;
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -57,6 +57,7 @@ fn draw_pane(frame: &mut Frame<'_>, area: Rect, pane: PaneId, app: &mut App, ui:
         Some(Tab::Editor(_)) => editor::draw(frame, content, tab_id, pane, focused, app, ui),
         Some(Tab::Table(_)) => table::draw(frame, content, tab_id, pane, focused, app, ui),
         Some(Tab::KeyValue(_)) => keyvalue::draw(frame, content, tab_id, pane, focused, app, ui),
+        Some(Tab::Document(_)) => document::draw(frame, content, tab_id, focused, app, ui),
         None => {}
     }
 }
@@ -95,6 +96,7 @@ fn draw_tab_bar(
             Tab::Editor(_) => "≡",
             Tab::Table(_) => "▦",
             Tab::KeyValue(_) => "⚿",
+            Tab::Document(_) => "❏",
         };
         let label = format!(" {icon} {} ", text::truncate(&tab.title(), 24));
         let is_active = index == pane_state.active;

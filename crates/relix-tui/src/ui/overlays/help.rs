@@ -26,6 +26,7 @@ pub fn draw(frame: &mut Frame<'_>, area: Rect, scroll: usize, app: &App, ui: &Ui
         KeyContext::Editor,
         KeyContext::Grid,
         KeyContext::KeyValue,
+        KeyContext::Document,
     ] {
         if !groups.contains(&context) {
             groups.push(context);
@@ -105,6 +106,7 @@ fn context_title(context: KeyContext) -> &'static str {
         KeyContext::Editor => "SQL editor",
         KeyContext::Grid => "Data grid",
         KeyContext::KeyValue => "Key browser",
+        KeyContext::Document => "Document browser",
     }
 }
 

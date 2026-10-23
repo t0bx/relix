@@ -12,6 +12,7 @@ use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use relix_app::command::Command;
+use relix_app::document_tab::DocumentFocus;
 use relix_app::editor_tab::{EditorFocus, ResultKind};
 use relix_app::keyvalue_tab::KeyValueFocus;
 use relix_app::notifications::Level;
@@ -77,6 +78,8 @@ fn mode(app: &App) -> Mode {
             KeyValueFocus::Console => Mode::Console,
             _ => Mode::Keys,
         },
+        Some(Tab::Document(tab)) if tab.focus == DocumentFocus::Filter => Mode::Filter,
+        Some(Tab::Document(_)) => Mode::Keys,
         None => Mode::Normal,
     }
 }
@@ -147,6 +150,7 @@ pub fn draw(frame: &mut Frame<'_>, area: Rect, app: &App, ui: &UiState) {
             tab.keys.len(),
             if tab.scan_complete { "" } else { "+" }
         )),
+        Some(Tab::Document(tab)) => right_parts.push(tab.page_label()),
         None => {}
     }
     right_parts.push(format!(

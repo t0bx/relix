@@ -22,6 +22,7 @@ tracing = "0.1.44"
 unicode-width = "0.2.2"
 
 [dev-dependencies]
+serde_json.workspace = true
 relix-app = { path = "../relix-app", features = ["test-support"] }
 relix-testing.workspace = true
 tempfile = "3.27.0"

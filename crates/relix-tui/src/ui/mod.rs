@@ -3,6 +3,7 @@
  * @since 23.10.2026
  */
 
+mod document;
 mod editor;
 mod grid;
 mod header;
