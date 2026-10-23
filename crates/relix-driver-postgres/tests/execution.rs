@@ -3,18 +3,31 @@
  * @since 23.10.2026
  */
 
+#![allow(clippy::unwrap_used)]
+
 mod common;
+
+use common::{Engine, for_each_engine};
 
 use relix_core::{StatementOutcome, Value};
 use relix_driver_api::{ErrorKind, ExecuteOptions};
 use std::time::Duration;
 
-#[tokio::test]
-async fn select_returns_typed_rows() {
-    let Some(config) = common::config() else {
+for_each_engine!(
+    select_returns_typed_rows,
+    row_limit_truncates_and_flags_more_rows,
+    ddl_and_dml_report_completion_and_affected_rows,
+    syntax_errors_carry_a_zero_based_position,
+    multi_line_syntax_errors_point_into_the_failing_line,
+    session_transactions_span_statements,
+    running_statements_can_be_cancelled,
+);
+
+async fn select_returns_typed_rows(engine: Engine) {
+    let Some(config) = engine.config() else {
         return;
     };
-    let connection = common::connect(&config).await;
+    let connection = common::connect(engine, &config).await;
     let outcome = common::run(
         connection.as_ref(),
         "SELECT 1::int4 AS a, true AS b, 1.5::float8 AS c, 12.50::numeric AS d, NULL::text AS e",
@@ -45,12 +58,11 @@ async fn select_returns_typed_rows() {
     connection.close().await.unwrap();
 }
 
-#[tokio::test]
-async fn row_limit_truncates_and_flags_more_rows() {
-    let Some(config) = common::config() else {
+async fn row_limit_truncates_and_flags_more_rows(engine: Engine) {
+    let Some(config) = engine.config() else {
         return;
     };
-    let connection = common::connect(&config).await;
+    let connection = common::connect(engine, &config).await;
     let sql = common::sql(connection.as_ref());
     let outcome = sql
         .execute(
@@ -71,12 +83,11 @@ async fn row_limit_truncates_and_flags_more_rows() {
     connection.close().await.unwrap();
 }
 
-#[tokio::test]
-async fn ddl_and_dml_report_completion_and_affected_rows() {
-    let Some(config) = common::config() else {
+async fn ddl_and_dml_report_completion_and_affected_rows(engine: Engine) {
+    let Some(config) = engine.config() else {
         return;
     };
-    let connection = common::connect(&config).await;
+    let connection = common::connect(engine, &config).await;
     let table = common::table_name("exec_dml");
     let created = common::run(
         connection.as_ref(),
@@ -107,12 +118,11 @@ async fn ddl_and_dml_report_completion_and_affected_rows() {
     connection.close().await.unwrap();
 }
 
-#[tokio::test]
-async fn syntax_errors_carry_a_zero_based_position() {
-    let Some(config) = common::config() else {
+async fn syntax_errors_carry_a_zero_based_position(engine: Engine) {
+    let Some(config) = engine.config() else {
         return;
     };
-    let connection = common::connect(&config).await;
+    let connection = common::connect(engine, &config).await;
     let error = common::sql(connection.as_ref())
         .execute("SELECT * FORM pg_class", &ExecuteOptions::default())
         .await
@@ -122,12 +132,26 @@ async fn syntax_errors_carry_a_zero_based_position() {
     connection.close().await.unwrap();
 }
 
-#[tokio::test]
-async fn session_transactions_span_statements() {
-    let Some(config) = common::config() else {
+async fn multi_line_syntax_errors_point_into_the_failing_line(engine: Engine) {
+    let Some(config) = engine.config() else {
         return;
     };
-    let connection = common::connect(&config).await;
+    let connection = common::connect(engine, &config).await;
+    let statement = "SELECT 1,\n2 FORM pg_class";
+    let error = common::sql(connection.as_ref())
+        .execute(statement, &ExecuteOptions::default())
+        .await
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Query);
+    assert_eq!(error.position, statement.find("pg_class"), "{error:?}");
+    connection.close().await.unwrap();
+}
+
+async fn session_transactions_span_statements(engine: Engine) {
+    let Some(config) = engine.config() else {
+        return;
+    };
+    let connection = common::connect(engine, &config).await;
     let table = common::table_name("exec_tx");
     let sql = common::sql(connection.as_ref());
     common::run(
@@ -159,12 +183,11 @@ async fn session_transactions_span_statements() {
     connection.close().await.unwrap();
 }
 
-#[tokio::test]
-async fn running_statements_can_be_cancelled() {
-    let Some(config) = common::config() else {
+async fn running_statements_can_be_cancelled(engine: Engine) {
+    let Some(config) = engine.config() else {
         return;
     };
-    let connection = common::connect(&config).await;
+    let connection = common::connect(engine, &config).await;
     let sql = common::sql(connection.as_ref());
     let options = ExecuteOptions::default();
     let (result, _) = tokio::join!(sql.execute("SELECT pg_sleep(30)", &options), async {

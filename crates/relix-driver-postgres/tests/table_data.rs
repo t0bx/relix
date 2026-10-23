@@ -3,19 +3,28 @@
  * @since 23.10.2026
  */
 
+#![allow(clippy::unwrap_used)]
+
 mod common;
+
+use common::{Engine, for_each_engine};
 
 use relix_core::{
     CellChange, ChangeReport, ChangeSet, RowChange, SortDirection, SortKey, TableQuery, Value,
 };
 use relix_driver_api::ErrorKind;
 
-#[tokio::test]
-async fn pages_through_rows_with_lookahead() {
-    let Some(config) = common::config() else {
+for_each_engine!(
+    pages_through_rows_with_lookahead,
+    applies_inserts_updates_and_deletes_in_one_transaction,
+    conflicting_change_rolls_back_everything,
+);
+
+async fn pages_through_rows_with_lookahead(engine: Engine) {
+    let Some(config) = engine.config() else {
         return;
     };
-    let connection = common::connect(&config).await;
+    let connection = common::connect(engine, &config).await;
     let sql = common::sql(connection.as_ref());
     let name = common::table_name("page");
     common::run(
@@ -58,12 +67,11 @@ async fn pages_through_rows_with_lookahead() {
     connection.close().await.unwrap();
 }
 
-#[tokio::test]
-async fn applies_inserts_updates_and_deletes_in_one_transaction() {
-    let Some(config) = common::config() else {
+async fn applies_inserts_updates_and_deletes_in_one_transaction(engine: Engine) {
+    let Some(config) = engine.config() else {
         return;
     };
-    let connection = common::connect(&config).await;
+    let connection = common::connect(engine, &config).await;
     let sql = common::sql(connection.as_ref());
     let name = common::table_name("changes");
     common::run(
@@ -129,12 +137,11 @@ async fn applies_inserts_updates_and_deletes_in_one_transaction() {
     connection.close().await.unwrap();
 }
 
-#[tokio::test]
-async fn conflicting_change_rolls_back_everything() {
-    let Some(config) = common::config() else {
+async fn conflicting_change_rolls_back_everything(engine: Engine) {
+    let Some(config) = engine.config() else {
         return;
     };
-    let connection = common::connect(&config).await;
+    let connection = common::connect(engine, &config).await;
     let sql = common::sql(connection.as_ref());
     let name = common::table_name("conflict");
     common::run(
@@ -177,7 +184,11 @@ async fn conflicting_change_rolls_back_everything() {
     };
     let error = sql.apply_changes(&duplicate).await.unwrap_err();
     assert_eq!(error.kind, ErrorKind::Query);
-    assert!(error.detail.is_some(), "{error:?}");
+    assert_eq!(
+        error.detail.is_some(),
+        engine.details_unique_violations(),
+        "{error:?}"
+    );
     assert_eq!(sql.count_rows(&table, None).await.unwrap(), 1);
     common::run(connection.as_ref(), &format!("DROP TABLE {name}")).await;
     connection.close().await.unwrap();

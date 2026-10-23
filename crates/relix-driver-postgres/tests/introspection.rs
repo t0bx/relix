@@ -3,16 +3,25 @@
  * @since 23.10.2026
  */
 
+#![allow(clippy::unwrap_used)]
+
 mod common;
+
+use common::{Engine, for_each_engine};
 
 use relix_core::{ObjectInfo, ObjectKind, TableRef};
 
-#[tokio::test]
-async fn lists_databases_and_schemas() {
-    let Some(config) = common::config() else {
+for_each_engine!(
+    lists_databases_and_schemas,
+    browses_other_databases_on_the_same_server,
+    describes_tables_views_and_routines,
+);
+
+async fn lists_databases_and_schemas(engine: Engine) {
+    let Some(config) = engine.config() else {
         return;
     };
-    let connection = common::connect(&config).await;
+    let connection = common::connect(engine, &config).await;
     let sql = common::sql(connection.as_ref());
     let databases = sql.databases().await.unwrap();
     let default = databases
@@ -35,20 +44,20 @@ async fn lists_databases_and_schemas() {
         .position(|schema| schema == "pg_catalog")
         .unwrap();
     assert!(public < catalog);
-    assert_eq!(
-        schemas.last().map(String::as_str),
-        Some("information_schema")
-    );
+    let information_schema = schemas
+        .iter()
+        .position(|schema| schema == "information_schema")
+        .unwrap();
+    assert!(catalog < information_schema);
     assert!(!schemas.iter().any(|schema| schema == "pg_toast"));
     connection.close().await.unwrap();
 }
 
-#[tokio::test]
-async fn browses_other_databases_on_the_same_server() {
-    let Some(config) = common::config() else {
+async fn browses_other_databases_on_the_same_server(engine: Engine) {
+    let Some(config) = engine.config() else {
         return;
     };
-    let connection = common::connect(&config).await;
+    let connection = common::connect(engine, &config).await;
     let sql = common::sql(connection.as_ref());
     let objects = sql.objects("postgres", Some("pg_catalog")).await.unwrap();
     let pg_class = objects
@@ -66,12 +75,11 @@ async fn browses_other_databases_on_the_same_server() {
     connection.close().await.unwrap();
 }
 
-#[tokio::test]
-async fn describes_tables_views_and_routines() {
-    let Some(config) = common::config() else {
+async fn describes_tables_views_and_routines(engine: Engine) {
+    let Some(config) = engine.config() else {
         return;
     };
-    let connection = common::connect(&config).await;
+    let connection = common::connect(engine, &config).await;
     let sql = common::sql(connection.as_ref());
     let schema = common::table_name("intro");
     let setup = [
@@ -164,11 +172,14 @@ async fn describes_tables_views_and_routines() {
     assert_eq!(foreign_key.referenced_columns, vec!["id".to_owned()]);
     let ddl = details.definition.unwrap();
     assert!(
-        ddl.starts_with(&format!("CREATE TABLE \"{schema}\".\"child\" (")),
+        ddl.starts_with(&format!(
+            "CREATE TABLE {} (",
+            engine.ddl_name(&schema, "child")
+        )),
         "{ddl}"
     );
     assert!(ddl.contains("FOREIGN KEY (parent_id)"), "{ddl}");
-    assert!(ddl.contains("CREATE INDEX child_note_idx"), "{ddl}");
+    assert!(ddl.contains("INDEX child_note_idx"), "{ddl}");
 
     let parent = TableRef::new(Some(database.clone()), Some(schema.clone()), "parent");
     let parent_details = sql.table_details(&parent).await.unwrap();
@@ -191,7 +202,10 @@ async fn describes_tables_views_and_routines() {
         .unwrap()
         .unwrap();
     assert!(
-        view.starts_with(&format!("CREATE VIEW \"{schema}\".\"child_view\" AS")),
+        view.starts_with(&format!(
+            "CREATE VIEW {} ",
+            engine.ddl_name(&schema, "child_view")
+        )),
         "{view}"
     );
     let materialized = sql
@@ -208,11 +222,7 @@ async fn describes_tables_views_and_routines() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(
-        functions.matches("CREATE OR REPLACE FUNCTION").count(),
-        2,
-        "{functions}"
-    );
+    assert_eq!(functions.matches(" FUNCTION ").count(), 2, "{functions}");
     assert!(functions.contains("\n\n"));
     let procedure = sql
         .object_definition(&object("noop", ObjectKind::Procedure))
@@ -225,13 +235,19 @@ async fn describes_tables_views_and_routines() {
         .await
         .unwrap()
         .unwrap();
-    assert!(sequence.contains("START WITH 5"), "{sequence}");
+    assert!(
+        sequence.contains("START WITH 5") || sequence.contains("START 5"),
+        "{sequence}"
+    );
     let table_ddl = sql
         .object_definition(&object("parent", ObjectKind::Table))
         .await
         .unwrap()
         .unwrap();
-    assert!(table_ddl.contains("UNIQUE (code)"), "{table_ddl}");
+    assert!(
+        table_ddl.contains("UNIQUE") && table_ddl.contains("parent_code_key"),
+        "{table_ddl}"
+    );
 
     common::run(
         connection.as_ref(),
