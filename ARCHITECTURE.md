@@ -12,13 +12,19 @@ asynchronous services.
 | `relix` | Executable: CLI, logging, settings loading, composition of drivers / driver manager / keyring, runtime and terminal startup and shutdown |
 | `relix-core` | Domain model shared by everything: values, result batches, metadata, table queries, change sets, key-value model, data source definitions, dialects, ids |
 | `relix-config` | Platform paths, global settings with validation/migration/recovery, key chord parsing, colours and themes, atomic owner-only file writes |
-| `relix-project` | Projects, data source associations, sessions (layout, tabs, drafts), scripts, query/filter history persistence, credential storage (OS keyring with in-memory fallback), project export/import |
+| `relix-project` | Projects, data source associations, reusable SSH/VPN server configurations (global and project scope), sessions (layout, tabs, drafts), scripts, query/filter history persistence, credential storage (OS keyring with in-memory fallback), project export/import |
 | `relix-driver-api` | Driver interfaces (`DatabaseDriver`, `DatabaseConnection`, `SqlIntrospector`, `QueryExecutor`, `TableDataAccess`, `KeyValueConnection`), capabilities, typed errors, timeouts, dialect-aware SQL builder, external connector IPC protocol |
 | `relix-driver-postgres` | PostgreSQL adapter (`tokio-postgres`, rustls) |
 | `relix-driver-mysql` | MySQL and MariaDB adapters sharing one implementation (`mysql_async`, rustls) |
 | `relix-driver-sqlite` | SQLite adapter (`rusqlite`, bundled SQLite) |
 | `relix-driver-redis` | Redis adapter (`redis`, rustls) implementing the key-value interface |
 | `relix-driver-manager` | Driver registry, package registries, signed downloads, atomic installation, external connector runtime |
+| `relix-driver-search` | Elasticsearch and OpenSearch (one implementation, product detection) over the shared HTTP transport |
+| `relix-driver-http` | Shared HTTP transport for REST and SQL-over-HTTP engines: TLS modes, tunnel host pinning, authentication, error mapping |
+| `relix-tls` | Shared rustls client configuration (`prefer`/`require`/`verify-full`, custom CA) |
+| `relix-ssh` | SSH sessions (russh), authentication, known-hosts verification, jump-host chains, local forwarding, shared reference-counted sessions with keepalive and reconnection |
+| `relix-vpn` | System VPN verification, managed WireGuard/OpenVPN profiles through elevated system tools, route conflict detection, ownership-aware lifecycle |
+| `relix-connections` | Connection manager: resolves a data source's network route (direct, SSH, VPN, VPN + SSH), acquires leases and connects the driver to the resulting endpoint |
 | `relix-connector-sdk` | Library for writing external connectors plus the reference `relix-csv-connector` |
 | `relix-query` | SQL lexer, statement splitter, statement classification, script execution coordination (cancellation, timeouts), history, export, result wrapping for server-side paging |
 | `relix-editor` | Text buffer with undo/redo, movement, search/replace, highlighting, diagnostics, completion engine |
@@ -32,12 +38,16 @@ asynchronous services.
 relix ─┬─> relix-tui ──────> relix-app ─┬─> relix-editor ──> relix-query ──> relix-driver-api ──> relix-core
        │                                ├─> relix-query
        │                                ├─> relix-project ──> relix-config
+       │                                ├─> relix-connections ─┬─> relix-ssh
+       │                                │                      ├─> relix-vpn
+       │                                │                      └─> relix-project
        │                                └─> relix-driver-api
        ├─> relix-driver-manager ──> relix-driver-api, relix-config
        ├─> relix-driver-postgres ┐
        ├─> relix-driver-mysql    ├─> relix-driver-api, relix-query (shared SQL lexer)
        ├─> relix-driver-sqlite   ┘
-       └─> relix-driver-redis ──> relix-driver-api
+       ├─> relix-driver-redis ──> relix-driver-api
+       └─> relix-driver-search ──> relix-driver-http ──> relix-tls, relix-driver-api
 relix-connector-sdk ──> relix-driver-api, relix-driver-sqlite (reference connector)
 relix-testing ──> relix-driver-api
 ```
@@ -105,13 +115,57 @@ distinguish authentication failures (prompt for a password), lost connections (m
 source disconnected, never retry a statement whose outcome is unknown), conflicts and
 syntax errors (underline the position in the editor).
 
+## Connection management
+
+```text
+App::connect(source)
+  └─ plan_network(definition, server catalog, driver target)   relix-connections
+       ├─ direct           → driver.connect(config)
+       ├─ VPN              → VpnManager::acquire(profile)  ─┐
+       ├─ SSH tunnel       → TunnelManager::open(chain)    ─┤ leases held by the
+       └─ VPN + SSH tunnel → VPN lease, then SSH lease     ─┘ returned connection
+  └─ driver.connect(config.redirected(127.0.0.1, local_port))  TLS keeps the original host name
+```
+
+* `relix-ssh` keys sessions by the whole hop chain configuration, so identical chains share
+  one session and changed configurations get a new one. Forwards are shared per target.
+  Both are reference counted by `TunnelLease`s; dropping the last lease closes them.
+* `relix-vpn` verifies system VPNs and starts managed profiles through a single elevated
+  command. `VpnLease`s count users; only tunnels Relix started are stopped.
+* `LeasedConnection` wraps the driver connection and releases the leases on `close`; it
+  also exposes the route and tunnel health to the explorer.
+* Network failures the user can fix (unknown host key, missing SSH secret, VPN approval) are
+  returned as typed `ConnectionError`s, turned into dialogs by the app and retried after the
+  user answered.
+* Engines whose transport cannot be redirected to one TCP endpoint (cloud APIs, files)
+  declare `ConnectionTarget::Cloud` / `File` and are refused for SSH tunnels up front.
+
+## Data models and drivers
+
+`DriverCapabilities` declares the data model (`relational`, `key_value`, `document`,
+`wide_column`, `graph`, `time_series`, `search`) and features (`DatabaseCapability`). The
+app branches on them instead of assuming SQL:
+
+* tabular models (relational, wide-column, graph, time-series) use the catalog interfaces
+  (`SqlIntrospector`, `TableDataAccess`) for browsing — graph labels and relationship types
+  are their own object kinds;
+* key-value stores use `KeyValueConnection` and the key browser;
+* document and search stores use `DocumentConnection` and the document browser
+  (namespaces → collections → documents with native JSON filters, paging tokens, CRUD and
+  index management);
+* every engine with a console implements `QueryExecutor`; statements are split per dialect
+  (SQL lexer, MongoDB command documents, Dev-Tools style search requests).
+
 ## Project persistence
 
 ```text
 <config>/config.toml                  global settings (validated, migrated, quarantined if corrupt)
 <config>/themes/*.toml                custom themes
 <data>/recent.toml                    recently opened projects
+<config>/servers.toml                 global SSH and VPN configurations (no secrets)
+<config>/ssh/known_hosts              host keys trusted from Relix
 <data>/projects/<id>/project.toml     project metadata and data source definitions (no secrets)
+<data>/projects/<id>/servers.toml     project-scoped SSH and VPN configurations (no secrets)
 <data>/projects/<id>/session.json     panes, tabs, cursor positions, connected sources, explorer state
 <data>/projects/<id>/drafts/*.sql     unsaved editor contents
 <data>/projects/<id>/scripts/*.sql    saved scripts
@@ -119,7 +173,9 @@ syntax errors (underline the position in the editor).
 <data>/projects/<id>/filters.json     WHERE filter history per table
 <data>/drivers/installed.toml         installed external driver packages
 <data>/logs/relix.log.*               daily rotated logs
-OS keyring: service "relix", account "project/<id>/datasource/<id>"
+<data>/vpn/<id>.{pid,log}             state of OpenVPN daemons started by Relix
+OS keyring: service "relix", accounts "project/<id>/datasource/<id>",
+            "global/server/<id>/{password,passphrase}", "project/<id>/server/<id>/…"
 ```
 
 All files are written atomically (temporary file + rename) with owner-only permissions on
