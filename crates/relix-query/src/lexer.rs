@@ -4,7 +4,7 @@
  */
 
 use crate::vocabulary::is_keyword;
-use relix_core::Dialect;
+use relix_core::{Dialect, StringEscape};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenKind {
@@ -104,6 +104,21 @@ impl Lexer<'_> {
         self.bytes.get(self.position + offset).copied()
     }
 
+    fn backslash_escapes(&self) -> bool {
+        self.dialect.string_escape() != StringEscape::Doubling
+    }
+
+    fn double_quotes_strings(&self) -> bool {
+        matches!(
+            self.dialect,
+            Dialect::MySql
+                | Dialect::BigQuery
+                | Dialect::Cypher
+                | Dialect::MongoCommand
+                | Dialect::SearchRequest
+        )
+    }
+
     fn next_kind(&mut self) -> TokenKind {
         let Some(current) = self.peek(0) else {
             return TokenKind::Unknown;
@@ -111,13 +126,18 @@ impl Lexer<'_> {
         match current {
             byte if byte.is_ascii_whitespace() => self.whitespace(),
             b'-' if self.peek(1) == Some(b'-') => self.line_comment(),
-            b'#' if self.dialect == Dialect::MySql => self.line_comment(),
+            b'#' if self.dialect.has_hash_comments() => self.line_comment(),
+            b'/' if self.peek(1) == Some(b'/') && self.dialect.has_slash_comments() => {
+                self.line_comment()
+            }
             b'/' if self.peek(1) == Some(b'*') => self.block_comment(),
-            b'\'' => self.quoted(b'\'', TokenKind::String, self.dialect == Dialect::MySql),
-            b'"' if self.dialect == Dialect::MySql => self.quoted(b'"', TokenKind::String, true),
+            b'\'' => self.quoted(b'\'', TokenKind::String, self.backslash_escapes()),
+            b'"' if self.double_quotes_strings() => {
+                self.quoted(b'"', TokenKind::String, self.backslash_escapes())
+            }
             b'"' => self.quoted(b'"', TokenKind::QuotedIdentifier, false),
             b'`' => self.quoted(b'`', TokenKind::QuotedIdentifier, false),
-            b'[' if self.dialect == Dialect::Sqlite => self.bracket_identifier(),
+            b'[' if self.dialect.has_bracket_identifiers() => self.bracket_identifier(),
             b'e' | b'E' if self.dialect == Dialect::Postgres && self.peek(1) == Some(b'\'') => {
                 self.position += 1;
                 self.quoted(b'\'', TokenKind::String, true)
@@ -189,7 +209,7 @@ impl Lexer<'_> {
     /// Consumes a `/* ... */` comment. PostgreSQL allows nesting, other dialects end the
     /// comment at the first closing marker.
     fn block_comment(&mut self) -> TokenKind {
-        let nested = self.dialect == Dialect::Postgres;
+        let nested = self.dialect.has_nested_comments();
         let mut depth = 0usize;
         while let Some(byte) = self.peek(0) {
             if byte == b'/' && self.peek(1) == Some(b'*') {
@@ -250,7 +270,7 @@ impl Lexer<'_> {
             }
             return TokenKind::Parameter;
         }
-        if self.dialect != Dialect::Postgres {
+        if !self.dialect.has_dollar_quotes() {
             self.position += 1;
             return TokenKind::Operator;
         }
@@ -427,5 +447,19 @@ mod tests {
         let tokens = tokenize(source, Dialect::Generic);
         let rebuilt: String = tokens.iter().map(|token| token.text).collect();
         assert_eq!(rebuilt, source);
+    }
+
+    #[test]
+    fn new_dialects_use_their_quoting_and_comment_rules() {
+        let mssql = kinds("SELECT [order id] FROM t", Dialect::MsSql);
+        assert_eq!(mssql[1], (TokenKind::QuotedIdentifier, "[order id]"));
+        let cypher = kinds("MATCH (n) // all nodes\nRETURN 'it\\'s'", Dialect::Cypher);
+        assert!(cypher.contains(&(TokenKind::LineComment, "// all nodes")));
+        assert!(cypher.contains(&(TokenKind::String, "'it\\'s'")));
+        let bigquery = kinds("SELECT \"a\" # note", Dialect::BigQuery);
+        assert_eq!(bigquery[1], (TokenKind::String, "\"a\""));
+        assert_eq!(bigquery[2].0, TokenKind::LineComment);
+        let duckdb = kinds("SELECT $$ a; b $$", Dialect::DuckDb);
+        assert_eq!(duckdb[1], (TokenKind::String, "$$ a; b $$"));
     }
 }
