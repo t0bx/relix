@@ -558,6 +558,29 @@ impl VpnManager {
         }
     }
 
+    /// Stops every tunnel Relix started whose profile asks for automatic disconnection;
+    /// called when the application exits so no managed VPN outlives it unintentionally.
+    /// Manually connected tunnels without auto-disconnect stay up.
+    pub async fn shutdown(&self) {
+        let owned: Vec<Active> = {
+            let mut state = self.state();
+            let ids: Vec<ServerConfigId> = state
+                .active
+                .iter()
+                .filter(|(_, active)| active.owned && active.profile.auto_disconnect)
+                .map(|(id, _)| *id)
+                .collect();
+            ids.into_iter()
+                .filter_map(|id| state.active.remove(&id))
+                .collect()
+        };
+        for active in owned {
+            if let Err(error) = self.stop(active).await {
+                tracing::warn!(%error, "VPN disconnect on exit failed");
+            }
+        }
+    }
+
     pub fn runtime_dir(&self) -> &Path {
         &self.inner.runtime_dir
     }

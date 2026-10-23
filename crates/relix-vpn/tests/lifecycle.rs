@@ -254,6 +254,27 @@ async fn profiles_without_auto_disconnect_stay_up() {
 }
 
 #[tokio::test]
+async fn shutdown_stops_owned_auto_disconnect_tunnels_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let host = Arc::new(SimulatedHost::default());
+    let manager = manager(&host, dir.path());
+    let office = wireguard_profile(dir.path(), "Office", "office", "10.10.0.0/16");
+    let mut lab = wireguard_profile(dir.path(), "Lab", "lab", "172.16.0.0/16");
+    lab.auto_disconnect = false;
+    manager.connect(&office, Approval::Granted).await.unwrap();
+    manager.connect(&lab, Approval::Granted).await.unwrap();
+    manager.shutdown().await;
+    let commands = host.privileged_commands();
+    assert_eq!(commands.len(), 3);
+    assert!(commands[2].contains("office"));
+    assert_eq!(manager.status(&office), VpnStatus::Disconnected);
+    assert!(matches!(
+        manager.status(&lab),
+        VpnStatus::Connected { owned: true, .. }
+    ));
+}
+
+#[tokio::test]
 async fn already_running_managed_profiles_are_not_owned() {
     let dir = tempfile::tempdir().unwrap();
     let host = Arc::new(SimulatedHost::default());
