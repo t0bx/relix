@@ -10,7 +10,7 @@ use relix_core::{
     TableQuery, TableRef,
 };
 use relix_driver_api::{
-    DatabaseConnection, DriverError, ExecuteOptions, ServerInfo, SqlConnection, SqlExecutor,
+    DatabaseConnection, DriverError, ExecuteOptions, QueryExecutor, ServerInfo, SqlConnection,
     SqlIntrospector, TableDataAccess,
 };
 
@@ -84,7 +84,7 @@ impl SqlIntrospector for CsvConnection {
 }
 
 #[async_trait]
-impl SqlExecutor for CsvConnection {
+impl QueryExecutor for CsvConnection {
     async fn execute(
         &self,
         statement: &str,

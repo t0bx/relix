@@ -11,7 +11,7 @@ use relix_core::{
 };
 use relix_driver_api::ipc::IpcCall;
 use relix_driver_api::{
-    DatabaseConnection, DriverError, ExecuteOptions, ServerInfo, SqlConnection, SqlExecutor,
+    DatabaseConnection, DriverError, ExecuteOptions, QueryExecutor, ServerInfo, SqlConnection,
     SqlIntrospector, TableDataAccess,
 };
 use std::time::Duration;
@@ -86,7 +86,7 @@ impl SqlIntrospector for ExternalConnection {
 }
 
 #[async_trait]
-impl SqlExecutor for ExternalConnection {
+impl QueryExecutor for ExternalConnection {
     async fn execute(
         &self,
         statement: &str,

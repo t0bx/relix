@@ -13,7 +13,7 @@ asynchronous services.
 | `relix-core` | Domain model shared by everything: values, result batches, metadata, table queries, change sets, key-value model, data source definitions, dialects, ids |
 | `relix-config` | Platform paths, global settings with validation/migration/recovery, key chord parsing, colours and themes, atomic owner-only file writes |
 | `relix-project` | Projects, data source associations, sessions (layout, tabs, drafts), scripts, query/filter history persistence, credential storage (OS keyring with in-memory fallback), project export/import |
-| `relix-driver-api` | Driver interfaces (`DatabaseDriver`, `DatabaseConnection`, `SqlIntrospector`, `SqlExecutor`, `TableDataAccess`, `KeyValueConnection`), capabilities, typed errors, timeouts, dialect-aware SQL builder, external connector IPC protocol |
+| `relix-driver-api` | Driver interfaces (`DatabaseDriver`, `DatabaseConnection`, `SqlIntrospector`, `QueryExecutor`, `TableDataAccess`, `KeyValueConnection`), capabilities, typed errors, timeouts, dialect-aware SQL builder, external connector IPC protocol |
 | `relix-driver-postgres` | PostgreSQL adapter (`tokio-postgres`, rustls) |
 | `relix-driver-mysql` | MySQL and MariaDB adapters sharing one implementation (`mysql_async`, rustls) |
 | `relix-driver-sqlite` | SQLite adapter (`rusqlite`, bundled SQLite) |
@@ -81,14 +81,14 @@ positions for the next input).
 ```text
 DatabaseDriver ── metadata(), capabilities(), connect(config) ──> Box<dyn DatabaseConnection>
 DatabaseConnection ── server_info, ping, close, as_sql(), as_key_value()
-SqlConnection = SqlIntrospector + SqlExecutor + TableDataAccess
+SqlConnection = SqlIntrospector + QueryExecutor + TableDataAccess
 KeyValueConnection ── scan_keys, describe_key, read_value, write, execute_command, server_details
 ```
 
 * Relational engines expose databases → schemas → objects → table details; capabilities say
   whether databases and schemas exist (MySQL has no schemas, SQLite uses attached
   databases as "databases").
-* `SqlExecutor::execute` runs exactly one statement on a long-lived session connection,
+* `QueryExecutor::execute` runs exactly one statement on a long-lived session connection,
   so user transactions (`BEGIN … COMMIT`) keep their meaning. Result sets are streamed and
   truncated at a row limit without buffering the rest.
 * Table pages, counts and change sets use separate connections or pools where the engine

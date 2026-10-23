@@ -9,11 +9,11 @@ use crate::errors::map_statement_error;
 use crate::text_query::run_text_query;
 use async_trait::async_trait;
 use relix_core::{Dialect, StatementOutcome};
-use relix_driver_api::{DriverError, ExecuteOptions, SqlExecutor};
+use relix_driver_api::{DriverError, ExecuteOptions, QueryExecutor};
 use relix_query::top_level_words;
 
 #[async_trait]
-impl SqlExecutor for PostgresConnection {
+impl QueryExecutor for PostgresConnection {
     async fn execute(
         &self,
         statement: &str,

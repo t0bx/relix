@@ -73,7 +73,7 @@ impl SqlIntrospector for PostgresConnection {
             ObjectKind::Sequence => {
                 definitions::sequence_definition(&guard, &self.builder, target).await
             }
-            ObjectKind::Trigger => Ok(None),
+            ObjectKind::Trigger | ObjectKind::NodeLabel | ObjectKind::RelationshipType => Ok(None),
         }
     }
 }

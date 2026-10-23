@@ -10,7 +10,8 @@ use mysql_async::prelude::Queryable;
 use mysql_async::{Conn, Pool};
 use relix_core::{Dialect, TableRef};
 use relix_driver_api::{
-    DatabaseConnection, DriverError, ParamStyle, ServerInfo, SqlBuilder, SqlConnection, SqlExecutor,
+    DatabaseConnection, DriverError, ParamStyle, QueryExecutor, ServerInfo, SqlBuilder,
+    SqlConnection,
 };
 use tokio::sync::Mutex;
 

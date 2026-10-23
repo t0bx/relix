@@ -9,11 +9,11 @@ use crate::rows::read_batch;
 use crate::statement_kind::StatementKind;
 use async_trait::async_trait;
 use relix_core::StatementOutcome;
-use relix_driver_api::{DriverError, ExecuteOptions, SqlExecutor};
+use relix_driver_api::{DriverError, ExecuteOptions, QueryExecutor};
 use rusqlite::Connection;
 
 #[async_trait]
-impl SqlExecutor for SqliteConnection {
+impl QueryExecutor for SqliteConnection {
     async fn execute(
         &self,
         statement: &str,

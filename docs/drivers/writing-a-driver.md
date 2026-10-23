@@ -21,7 +21,7 @@ crates/relix-driver-exampledb/
 │   ├── driver.rs         # DatabaseDriver: metadata, capabilities, connect
 │   ├── connection.rs     # DatabaseConnection
 │   ├── introspection.rs  # SqlIntrospector
-│   ├── execution.rs      # SqlExecutor
+│   ├── execution.rs      # QueryExecutor
 │   ├── table_data.rs     # TableDataAccess
 │   ├── values.rs         # engine values -> relix_core::Value
 │   └── errors.rs         # engine errors -> DriverError
@@ -95,7 +95,7 @@ Capabilities drive the UI: `schemas = false` skips the schema level in the explo
 * `SqlIntrospector` returns databases, schemas, objects (tables, views, routines,
   sequences, triggers) and `TableDetails` (columns, primary key, indexes, foreign keys and
   a DDL/definition string). It is called lazily per explorer level.
-* `SqlExecutor::execute` runs **one** statement on a long-lived session connection so
+* `QueryExecutor::execute` runs **one** statement on a long-lived session connection so
   `BEGIN`/`COMMIT` issued by the user keep their meaning. Stream rows, stop storing them
   after `options.row_limit`, set `has_more` and drain the rest. Return
   `StatementOutcome::Rows` for statements with a result set (even when empty),

@@ -118,11 +118,24 @@ fn object_folders(
 ) -> Vec<NewNode> {
     let order = [
         FolderKind::Tables,
+        FolderKind::Labels,
+        FolderKind::Relationships,
         FolderKind::Views,
         FolderKind::Routines,
         FolderKind::Sequences,
         FolderKind::Triggers,
     ];
+    let graph = objects.iter().any(|object| {
+        matches!(
+            object.kind,
+            ObjectKind::NodeLabel | ObjectKind::RelationshipType
+        )
+    });
+    let always_shown = if graph {
+        FolderKind::Labels
+    } else {
+        FolderKind::Tables
+    };
     order
         .into_iter()
         .filter_map(|folder| {
@@ -130,7 +143,7 @@ fn object_folders(
                 .iter()
                 .filter(|object| FolderKind::of(object.kind) == folder)
                 .collect();
-            if members.is_empty() && folder != FolderKind::Tables {
+            if members.is_empty() && folder != always_shown {
                 return None;
             }
             members.sort_by(|a, b| a.object.name.cmp(&b.object.name));

@@ -87,7 +87,7 @@ order; RELIX matches them by `id`. Methods without parameters still send `"param
 | `apply_changes` | `{changes: ChangeSet}` | `ChangeReport` |
 
 All payload types are the serde representations of the `relix-core` / `relix-driver-api`
-types of the same name; the semantics are those of `SqlIntrospector`, `SqlExecutor` and
+types of the same name; the semantics are those of `SqlIntrospector`, `QueryExecutor` and
 `TableDataAccess` (one statement per `execute`, at most `row_limit` rows with `has_more`,
 `apply_changes` in a single transaction, ...).
 

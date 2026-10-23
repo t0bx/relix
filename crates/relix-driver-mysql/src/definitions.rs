@@ -16,12 +16,15 @@ pub async fn show_create(
     kind: ObjectKind,
     object: &TableRef,
 ) -> Result<Option<String>, DriverError> {
-    let (sql, column) = show_create_statement(kind, &sql_builder().qualified_table(object));
+    let Some((sql, column)) = show_create_statement(kind, &sql_builder().qualified_table(object))
+    else {
+        return Ok(None);
+    };
     let row: Option<Row> = conn.query_first(sql).await.map_err(map_error)?;
     Ok(row.and_then(|row| text_at(&row, column)))
 }
 
-fn show_create_statement(kind: ObjectKind, qualified_name: &str) -> (String, usize) {
+fn show_create_statement(kind: ObjectKind, qualified_name: &str) -> Option<(String, usize)> {
     let (object_type, column) = match kind {
         ObjectKind::Table => ("TABLE", 1),
         ObjectKind::View | ObjectKind::MaterializedView => ("VIEW", 1),
@@ -29,11 +32,12 @@ fn show_create_statement(kind: ObjectKind, qualified_name: &str) -> (String, usi
         ObjectKind::Function => ("FUNCTION", 2),
         ObjectKind::Procedure => ("PROCEDURE", 2),
         ObjectKind::Trigger => ("TRIGGER", 2),
+        ObjectKind::NodeLabel | ObjectKind::RelationshipType => return None,
     };
-    (
+    Some((
         format!("SHOW CREATE {object_type} {qualified_name}"),
         column,
-    )
+    ))
 }
 
 #[cfg(test)]
@@ -46,11 +50,11 @@ mod tests {
         let qualified = sql_builder().qualified_table(&table);
         assert_eq!(
             show_create_statement(ObjectKind::Table, &qualified),
-            ("SHOW CREATE TABLE `shop`.`or``ders`".to_owned(), 1)
+            Some(("SHOW CREATE TABLE `shop`.`or``ders`".to_owned(), 1))
         );
         assert_eq!(
             show_create_statement(ObjectKind::Procedure, "`p`"),
-            ("SHOW CREATE PROCEDURE `p`".to_owned(), 2)
+            Some(("SHOW CREATE PROCEDURE `p`".to_owned(), 2))
         );
     }
 }

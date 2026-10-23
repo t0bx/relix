@@ -396,6 +396,7 @@ impl DataSourceForm {
                 ca_certificate: optional(FieldId::CaCertificate).map(PathBuf::from),
             },
             save_password: self.toggle_of(FieldId::SavePassword),
+            ..ConnectionSettings::default()
         };
         let definition = DataSourceDefinition {
             id: self.editing.unwrap_or_default(),
@@ -406,6 +407,7 @@ impl DataSourceForm {
                 .min(Environment::ALL.len() - 1)],
             color,
             settings,
+            network: Default::default(),
         };
         let password = (self.password_touched || self.editing.is_none())
             .then(|| self.text_of(FieldId::Password))

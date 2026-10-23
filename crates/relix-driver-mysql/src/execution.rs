@@ -11,10 +11,10 @@ use async_trait::async_trait;
 use mysql_async::prelude::Queryable;
 use mysql_async::{Conn, Error};
 use relix_core::StatementOutcome;
-use relix_driver_api::{DriverError, ExecuteOptions, SqlExecutor};
+use relix_driver_api::{DriverError, ExecuteOptions, QueryExecutor};
 
 #[async_trait]
-impl SqlExecutor for MySqlConnection {
+impl QueryExecutor for MySqlConnection {
     async fn execute(
         &self,
         statement: &str,

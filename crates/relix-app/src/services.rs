@@ -36,7 +36,7 @@ impl DriverDescriptor {
             status: "Ready".to_owned(),
             default_port: match target {
                 ConnectionTarget::Network { default_port } => Some(default_port),
-                ConnectionTarget::File => None,
+                ConnectionTarget::File | ConnectionTarget::Cloud => None,
             },
             target,
             dialect: None,

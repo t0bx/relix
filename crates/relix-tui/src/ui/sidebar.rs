@@ -213,6 +213,8 @@ fn icon(kind: &NodeKind, app: &App, ui: &UiState) -> (&'static str, ratatui::sty
             }
             ObjectKind::Sequence => (pick("#", "#"), styles.syntax_number),
             ObjectKind::Trigger => (pick("↻", "!"), styles.warning),
+            ObjectKind::NodeLabel => (pick("◉", "N"), styles.accent),
+            ObjectKind::RelationshipType => (pick("→", "R"), styles.info),
         },
         NodeKind::Column(column) if column.is_primary_key => (pick("⚷", "k"), styles.warning),
         NodeKind::Column(_) => (pick("◦", "-"), styles.muted),

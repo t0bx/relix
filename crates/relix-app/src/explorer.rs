@@ -18,6 +18,8 @@ pub enum FolderKind {
     Routines,
     Sequences,
     Triggers,
+    Labels,
+    Relationships,
 }
 
 impl FolderKind {
@@ -28,6 +30,8 @@ impl FolderKind {
             Self::Routines => "routines",
             Self::Sequences => "sequences",
             Self::Triggers => "triggers",
+            Self::Labels => "labels",
+            Self::Relationships => "relationship types",
         }
     }
 
@@ -38,6 +42,8 @@ impl FolderKind {
             ObjectKind::Function | ObjectKind::Procedure => Self::Routines,
             ObjectKind::Sequence => Self::Sequences,
             ObjectKind::Trigger => Self::Triggers,
+            ObjectKind::NodeLabel => Self::Labels,
+            ObjectKind::RelationshipType => Self::Relationships,
         }
     }
 }
