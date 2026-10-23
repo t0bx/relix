@@ -99,9 +99,7 @@ impl SqlApiClient {
 
     pub(crate) async fn cancel(&self, handle: &str) -> Result<(), DriverError> {
         let url = self.statements_url(&[handle, "cancel"]);
-        let response = self
-            .exchange(self.endpoint.request_url(Method::POST, url))
-            .await?;
+        let response = self.exchange(self.endpoint.empty_post(url)).await?;
         if response.status.is_success() {
             return Ok(());
         }

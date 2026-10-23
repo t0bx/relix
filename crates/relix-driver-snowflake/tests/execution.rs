@@ -361,6 +361,7 @@ async fn cancel_reaches_the_running_statement() {
     assert_eq!(result.unwrap_err().kind, ErrorKind::Cancelled);
     let cancels = requests_to(&server, "POST", CANCEL_PATH).await;
     assert_eq!(cancels.len(), 1);
+    assert_eq!(header(&cancels[0], "content-length"), "0");
     assert_eq!(
         header(&cancels[0], "x-snowflake-authorization-token-type"),
         "KEYPAIR_JWT"
