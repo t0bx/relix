@@ -13,6 +13,12 @@ publish = false
 relix-core.workspace = true
 relix-driver-api.workspace = true
 async-trait.workspace = true
+rand = { version = "0.10", features = ["thread_rng"], optional = true }
+russh = { version = "0.64.1", default-features = false, features = ["flate2", "ring", "rsa"], optional = true }
+tokio = { workspace = true, features = ["net"], optional = true }
+
+[features]
+ssh = ["dep:rand", "dep:russh", "dep:tokio"]
 
 [lints]
 workspace = true
