@@ -794,7 +794,7 @@ fn value_suggestions(
                 (false, true) => dialect.quote_literal(&text)[1..].to_owned(),
                 (false, false) => dialect.quote_literal(&text),
             };
-            CompletionItem::new(text, insert, CompletionKind::Snippet, Some("value".into()))
+            CompletionItem::new(text, insert, CompletionKind::Value, None)
         })
         .collect()
 }

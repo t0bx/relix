@@ -130,6 +130,11 @@ impl DataSourceForm {
                 "Port",
                 &settings
                     .port
+                    .or_else(|| {
+                        drivers
+                            .get(driver_index)
+                            .and_then(|driver| driver.default_port)
+                    })
                     .map(|port| port.to_string())
                     .unwrap_or_default(),
             ),
@@ -477,6 +482,12 @@ mod tests {
         set_text(&mut form, FieldId::FilePath, "/tmp/notes.db");
         let (definition, _) = form.build().unwrap();
         assert_eq!(definition.settings.host, None);
+    }
+
+    #[test]
+    fn new_forms_prefill_the_engine_default_port() {
+        let form = DataSourceForm::new(drivers(), None);
+        assert_eq!(form.text_of(FieldId::Port), "5432");
     }
 
     #[test]
