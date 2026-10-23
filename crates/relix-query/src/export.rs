@@ -34,6 +34,11 @@ pub fn to_json(columns: &[ColumnMeta], rows: &[Vec<Value>]) -> String {
     serde_json::to_string_pretty(&objects).unwrap_or_else(|_| "[]".to_owned())
 }
 
+pub fn pretty_json(text: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(text).ok()?;
+    serde_json::to_string_pretty(&value).ok()
+}
+
 /// Makes column names usable as JSON keys by suffixing duplicates (`id`, `id_2`, …), which
 /// is common for joins selecting `*` from several tables.
 pub fn unique_names(columns: &[ColumnMeta]) -> Vec<String> {
