@@ -40,6 +40,13 @@ through `pkexec`, the macOS administrator prompt or UAC after you approved the e
 in Relix; arguments are never interpolated into an unquoted shell string. Relix only stops
 VPN tunnels it started and that no data source uses any more.
 
+## Dependency audit
+
+CI runs `cargo audit --deny warnings`. One advisory is accepted in `.cargo/audit.toml`:
+RUSTSEC-2023-0071 (timing side channel in the `rsa` crate, no fixed release). Relix uses it
+only through the SSH library to sign one authentication challenge per login with your own
+RSA key, locally; Ed25519 keys avoid it entirely.
+
 ## Drivers
 
 Compiled-in drivers need no downloads. External connectors are only installed after you
