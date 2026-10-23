@@ -22,6 +22,7 @@ pub enum CompletionKind {
     DataType,
     Keyword,
     Snippet,
+    Value,
 }
 
 impl CompletionKind {
@@ -36,6 +37,7 @@ impl CompletionKind {
             Self::DataType => "type",
             Self::Keyword => "kw",
             Self::Snippet => "hist",
+            Self::Value => "val",
         }
     }
 }
@@ -366,6 +368,7 @@ impl<'a> Collector<'a> {
 
 fn kind_bonus(kind: CompletionKind) -> u32 {
     match kind {
+        CompletionKind::Value => 40,
         CompletionKind::Column | CompletionKind::Alias => 30,
         CompletionKind::Table | CompletionKind::View => 25,
         CompletionKind::Schema => 15,
