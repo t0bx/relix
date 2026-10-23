@@ -4,6 +4,7 @@
  */
 
 pub mod classify;
+pub mod completion;
 pub mod executor;
 pub mod export;
 pub mod history;
@@ -17,6 +18,7 @@ pub mod vocabulary;
 pub mod wrapping;
 
 pub use classify::{StatementKind, StatementTraits, classify};
+pub use completion::completion_message;
 pub use executor::{ScriptOutcome, ScriptRequest, StatementReport, run_script};
 pub use history::{HistoryEntry, QueryHistory, RecentList};
 pub use lexer::{Token, TokenKind, tokenize};
