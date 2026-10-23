@@ -6,9 +6,13 @@
 mod catalog;
 mod ddl;
 mod definitions;
+mod native_ddl;
+mod relation_sql;
 mod table_details;
+mod timescale;
 
 use crate::connection::PostgresConnection;
+use crate::flavor::Flavor;
 use async_trait::async_trait;
 use relix_core::{DatabaseInfo, ObjectInfo, ObjectKind, TableDetails, TableRef};
 use relix_driver_api::{DriverError, SqlIntrospector};
@@ -24,7 +28,7 @@ impl SqlIntrospector for PostgresConnection {
     async fn schemas(&self, database: &str) -> Result<Vec<String>, DriverError> {
         let client = self.data_client(Some(database)).await?;
         let guard = client.read().await;
-        catalog::list_schemas(&guard).await
+        catalog::list_schemas(&guard, self.server_flavor).await
     }
 
     async fn objects(
@@ -35,14 +39,21 @@ impl SqlIntrospector for PostgresConnection {
         let database = self.database_name(Some(database));
         let client = self.data_client(Some(database)).await?;
         let guard = client.read().await;
-        catalog::list_objects(&guard, database, schema).await
+        catalog::list_objects(&guard, self.server_flavor, database, schema).await
     }
 
     async fn table_details(&self, table: &TableRef) -> Result<TableDetails, DriverError> {
         let database = self.database_name(table.database.as_deref());
         let client = self.data_client(Some(database)).await?;
         let guard = client.read().await;
-        table_details::load_table_details(&guard, &self.builder, database, table).await
+        table_details::load_table_details(
+            &guard,
+            &self.builder,
+            self.server_flavor,
+            database,
+            table,
+        )
+        .await
     }
 
     async fn object_definition(&self, object: &ObjectInfo) -> Result<Option<String>, DriverError> {
@@ -51,18 +62,32 @@ impl SqlIntrospector for PostgresConnection {
         let client = self.data_client(Some(database)).await?;
         let guard = client.read().await;
         match object.kind {
-            ObjectKind::Table => {
-                table_details::load_table_details(&guard, &self.builder, database, target)
-                    .await
-                    .map(|details| details.definition)
+            ObjectKind::View | ObjectKind::MaterializedView | ObjectKind::Sequence
+                if self.server_flavor == Flavor::CockroachDb =>
+            {
+                native_ddl::show_create(&guard, &self.builder.qualified_table(target)).await
             }
+            ObjectKind::Table => table_details::load_table_details(
+                &guard,
+                &self.builder,
+                self.server_flavor,
+                database,
+                target,
+            )
+            .await
+            .map(|details| details.definition),
             ObjectKind::View | ObjectKind::MaterializedView => {
                 match table_details::find_relation(&guard, database, target).await? {
                     Some(relation) => {
                         let qualified_name = self.builder.qualified_table(&relation.table);
-                        table_details::view_ddl(&guard, &relation, &qualified_name)
-                            .await
-                            .map(Some)
+                        table_details::view_definition(
+                            &guard,
+                            self.server_flavor,
+                            &relation,
+                            &qualified_name,
+                        )
+                        .await
+                        .map(|(_, definition)| Some(definition))
                     }
                     None => Ok(None),
                 }

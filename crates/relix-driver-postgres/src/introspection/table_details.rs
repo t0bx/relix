@@ -4,69 +4,20 @@
  */
 
 use crate::errors::map_error;
+use crate::flavor::Flavor;
 use crate::introspection::ddl::{
     ColumnDefinition, Identity, NamedDefinition, TableDdl, create_table, create_view,
 };
+use crate::introspection::native_ddl::show_create;
+use crate::introspection::relation_sql::{
+    COLUMNS_SQL, CONSTRAINTS_SQL, FOREIGN_KEYS_SQL, GENERATED_KEY_DEFAULTS, INDEXES_SQL,
+    RELATION_SQL, VIEW_QUERY_SQL, VISIBLE_COLUMNS_SQL,
+};
+use crate::introspection::timescale;
 use crate::row_reader::read_column;
 use relix_core::{ColumnInfo, ForeignKeyInfo, IndexInfo, ObjectKind, TableDetails, TableRef};
 use relix_driver_api::{DriverError, SqlBuilder};
 use tokio_postgres::Client;
-
-const RELATION_SQL: &str = "SELECT c.oid, c.relkind::text, n.nspname::text, c.relname::text, \
-            obj_description(c.oid, 'pg_class'), \
-            CASE WHEN c.relkind = 'p' THEN pg_get_partkeydef(c.oid) END \
-     FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace \
-     WHERE c.relname = $2::text AND n.nspname = COALESCE($1::text, current_schema()) \
-       AND c.relkind IN ('r', 'p', 'f', 'v', 'm')";
-
-const COLUMNS_SQL: &str = "SELECT a.attname::text, format_type(a.atttypid, a.atttypmod), \
-            NOT a.attnotnull, pg_get_expr(d.adbin, d.adrelid), a.attnum::int4, \
-            a.attidentity::text, a.attgenerated::text, col_description(a.attrelid, a.attnum) \
-     FROM pg_catalog.pg_attribute a \
-     LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum \
-     WHERE a.attrelid = $1 AND a.attnum > 0 AND NOT a.attisdropped \
-     ORDER BY a.attnum";
-
-const INDEXES_SQL: &str = "SELECT i.relname::text, ix.indisunique, ix.indisprimary, \
-            ARRAY(SELECT CASE WHEN k.attnum = 0 \
-                              THEN pg_get_indexdef(ix.indexrelid, k.ord::int4, true) \
-                              ELSE a.attname::text END \
-                  FROM unnest(ix.indkey::int2[]) WITH ORDINALITY AS k(attnum, ord) \
-                  LEFT JOIN pg_catalog.pg_attribute a \
-                         ON a.attrelid = ix.indrelid AND a.attnum = k.attnum \
-                  WHERE k.ord <= ix.indnkeyatts ORDER BY k.ord), \
-            pg_get_indexdef(ix.indexrelid), \
-            EXISTS (SELECT 1 FROM pg_catalog.pg_constraint con \
-                    WHERE con.conindid = ix.indexrelid AND con.conrelid = ix.indrelid) \
-     FROM pg_catalog.pg_index ix JOIN pg_catalog.pg_class i ON i.oid = ix.indexrelid \
-     WHERE ix.indrelid = $1 \
-     ORDER BY ix.indisprimary DESC, i.relname";
-
-const FOREIGN_KEYS_SQL: &str = "SELECT con.conname::text, \
-            ARRAY(SELECT a.attname::text \
-                  FROM unnest(con.conkey) WITH ORDINALITY AS k(attnum, ord) \
-                  JOIN pg_catalog.pg_attribute a \
-                    ON a.attrelid = con.conrelid AND a.attnum = k.attnum \
-                  ORDER BY k.ord), \
-            rn.nspname::text, rc.relname::text, \
-            ARRAY(SELECT a.attname::text \
-                  FROM unnest(con.confkey) WITH ORDINALITY AS k(attnum, ord) \
-                  JOIN pg_catalog.pg_attribute a \
-                    ON a.attrelid = con.confrelid AND a.attnum = k.attnum \
-                  ORDER BY k.ord) \
-     FROM pg_catalog.pg_constraint con \
-     JOIN pg_catalog.pg_class rc ON rc.oid = con.confrelid \
-     JOIN pg_catalog.pg_namespace rn ON rn.oid = rc.relnamespace \
-     WHERE con.conrelid = $1 AND con.contype = 'f' \
-     ORDER BY con.conname";
-
-const CONSTRAINTS_SQL: &str = "SELECT conname::text, pg_get_constraintdef(oid, true) \
-     FROM pg_catalog.pg_constraint \
-     WHERE conrelid = $1 AND contype IN ('p', 'u', 'c', 'f', 'x') \
-     ORDER BY CASE contype WHEN 'p' THEN 0 WHEN 'u' THEN 1 WHEN 'c' THEN 2 \
-                           WHEN 'f' THEN 3 ELSE 4 END, conname";
-
-const VIEW_QUERY_SQL: &str = "SELECT pg_get_viewdef($1::oid, true)";
 
 pub(crate) struct Relation {
     pub(crate) oid: u32,
@@ -78,7 +29,7 @@ pub(crate) struct Relation {
 
 struct IndexDetails {
     info: IndexInfo,
-    definition: String,
+    definition: Option<String>,
     backs_constraint: bool,
 }
 
@@ -115,6 +66,7 @@ pub(crate) async fn find_relation(
 pub(crate) async fn load_table_details(
     client: &Client,
     builder: &SqlBuilder,
+    flavor: Flavor,
     database: &str,
     table: &TableRef,
 ) -> Result<TableDetails, DriverError> {
@@ -122,48 +74,92 @@ pub(crate) async fn load_table_details(
         .await?
         .ok_or_else(|| DriverError::query(format!("relation {table} does not exist")))?;
     let indexes = load_indexes(client, relation.oid).await?;
-    let primary_key = indexes
-        .iter()
-        .find(|index| index.info.is_primary)
-        .map(|index| index.info.columns.clone())
-        .unwrap_or_default();
-    let mut columns = load_columns(client, relation.oid).await?;
+    let mut columns = load_columns(client, flavor, relation.oid).await?;
+    let primary_key = visible_primary_key(&indexes, &columns);
     for column in &mut columns {
         column.info.is_primary_key = primary_key.contains(&column.info.name);
     }
     let foreign_keys = load_foreign_keys(client, database, relation.oid).await?;
     let qualified_name = builder.qualified_table(&relation.table);
-    let definition = match relation.kind {
-        ObjectKind::Table => {
+    let (kind, definition) = match (flavor, relation.kind) {
+        (Flavor::CockroachDb, kind) => (kind, show_create(client, &qualified_name).await?),
+        (_, ObjectKind::Table) => {
             let constraints = load_constraints(client, relation.oid).await?;
             let standalone_indexes: Vec<String> = indexes
                 .iter()
                 .filter(|index| !index.backs_constraint)
-                .map(|index| index.definition.clone())
+                .filter_map(|index| index.definition.clone())
                 .collect();
-            create_table(&TableDdl {
+            let mut ddl = create_table(&TableDdl {
                 qualified_name: &qualified_name,
                 columns: &columns,
                 constraints: &constraints,
                 standalone_indexes: &standalone_indexes,
                 partition_key: relation.partition_key.as_deref(),
                 comment: relation.comment.as_deref(),
-            })
+            });
+            if flavor.may_have_timescale_catalog()
+                && let Some(hypertable) =
+                    timescale::hypertable_statements(client, &qualified_name, &relation.table)
+                        .await?
+            {
+                ddl.push_str(&format!("\n{hypertable}\n"));
+            }
+            (ObjectKind::Table, Some(ddl))
         }
-        _ => view_ddl(client, &relation, &qualified_name).await?,
+        _ => {
+            let (kind, ddl) = view_definition(client, flavor, &relation, &qualified_name).await?;
+            (kind, Some(ddl))
+        }
     };
     Ok(TableDetails {
         table: relation.table,
-        kind: relation.kind,
+        kind,
         columns: columns.into_iter().map(|column| column.info).collect(),
         primary_key,
         indexes: indexes.into_iter().map(|index| index.info).collect(),
         foreign_keys,
-        definition: Some(definition),
+        definition,
     })
 }
 
-pub(crate) async fn view_ddl(
+/// The primary key as visible to `SELECT *`: a key over hidden columns (CockroachDB's
+/// implicit `rowid`) cannot address rows read by the data grid, so it is dropped.
+fn visible_primary_key(indexes: &[IndexDetails], columns: &[ColumnDefinition]) -> Vec<String> {
+    let primary_key = indexes
+        .iter()
+        .find(|index| index.info.is_primary)
+        .map(|index| index.info.columns.clone())
+        .unwrap_or_default();
+    let visible = primary_key
+        .iter()
+        .all(|name| columns.iter().any(|column| &column.info.name == name));
+    if visible { primary_key } else { Vec::new() }
+}
+
+/// Recreates a view-like relation. TimescaleDB continuous aggregates are plain views
+/// in `pg_class`; they are reported as materialized views with their own statement.
+pub(crate) async fn view_definition(
+    client: &Client,
+    flavor: Flavor,
+    relation: &Relation,
+    qualified_name: &str,
+) -> Result<(ObjectKind, String), DriverError> {
+    if flavor.may_have_timescale_catalog()
+        && relation.kind == ObjectKind::View
+        && let Some(ddl) =
+            timescale::continuous_aggregate_definition(client, qualified_name, &relation.table)
+                .await?
+    {
+        return Ok((ObjectKind::MaterializedView, ddl));
+    }
+    Ok((
+        relation.kind,
+        view_ddl(client, relation, qualified_name).await?,
+    ))
+}
+
+async fn view_ddl(
     client: &Client,
     relation: &Relation,
     qualified_name: &str,
@@ -180,19 +176,26 @@ pub(crate) async fn view_ddl(
     ))
 }
 
-async fn load_columns(client: &Client, oid: u32) -> Result<Vec<ColumnDefinition>, DriverError> {
-    let rows = client
-        .query(COLUMNS_SQL, &[&oid])
-        .await
-        .map_err(map_error)?;
+async fn load_columns(
+    client: &Client,
+    flavor: Flavor,
+    oid: u32,
+) -> Result<Vec<ColumnDefinition>, DriverError> {
+    let sql = match flavor {
+        Flavor::CockroachDb => VISIBLE_COLUMNS_SQL,
+        Flavor::Postgres | Flavor::YugabyteDb | Flavor::TimescaleDb => COLUMNS_SQL,
+    };
+    let rows = client.query(sql, &[&oid]).await.map_err(map_error)?;
     rows.iter()
         .map(|row| {
             let default_value: Option<String> = read_column(row, 3)?;
             let identity = Identity::from_code(&read_column::<String>(row, 5)?);
             let ordinal: i32 = read_column(row, 4)?;
-            let is_serial = default_value
-                .as_deref()
-                .is_some_and(|default| default.starts_with("nextval("));
+            let is_serial = default_value.as_deref().is_some_and(|default| {
+                GENERATED_KEY_DEFAULTS
+                    .iter()
+                    .any(|generator| default.starts_with(generator))
+            });
             Ok(ColumnDefinition {
                 info: ColumnInfo {
                     name: read_column(row, 0)?,

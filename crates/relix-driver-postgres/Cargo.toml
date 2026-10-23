@@ -1,6 +1,6 @@
 [package]
 name = "relix-driver-postgres"
-description = "Native PostgreSQL driver for the RELIX database IDE"
+description = "Native PostgreSQL, CockroachDB, YugabyteDB and TimescaleDB driver for the RELIX database IDE"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -86,6 +86,13 @@ pub(crate) fn create_view(qualified_name: &str, materialized: bool, query: &str)
     format!("CREATE {keyword} {qualified_name} AS\n{}", query.trim_end())
 }
 
+pub(crate) fn create_continuous_aggregate(qualified_name: &str, query: &str) -> String {
+    format!(
+        "CREATE MATERIALIZED VIEW {qualified_name}\nWITH (timescaledb.continuous) AS\n{}",
+        query.trim_end()
+    )
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SequenceOptions {
     pub(crate) data_type: String,
@@ -269,6 +276,10 @@ mod tests {
         assert_eq!(
             create_view("\"public\".\"v\"", true, " SELECT 1;\n"),
             "CREATE MATERIALIZED VIEW \"public\".\"v\" AS\n SELECT 1;"
+        );
+        assert_eq!(
+            create_continuous_aggregate("\"public\".\"hourly\"", " SELECT 1;\n"),
+            "CREATE MATERIALIZED VIEW \"public\".\"hourly\"\nWITH (timescaledb.continuous) AS\n SELECT 1;"
         );
     }
 }

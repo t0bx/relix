@@ -6,8 +6,9 @@
 use crate::connector::Connector;
 use crate::data_clients::DataClients;
 use crate::errors::{connection_closed, map_error};
+use crate::flavor::Flavor;
 use crate::managed_client::ManagedClient;
-use crate::row_reader::read_column;
+use crate::server_identity::identify_server;
 use async_trait::async_trait;
 use relix_core::{ConnectionConfig, Dialect};
 use relix_driver_api::{
@@ -17,13 +18,11 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_postgres::CancelToken;
 
-const PRODUCT_NAME: &str = "PostgreSQL";
-const SERVER_IDENTITY_SQL: &str = "SELECT current_setting('server_version'), current_database()";
-
 pub struct PostgresConnection {
     pub(crate) connector: Arc<Connector>,
     pub(crate) default_database: String,
     pub(crate) builder: SqlBuilder,
+    pub(crate) server_flavor: Flavor,
     server_info: ServerInfo,
     session: Mutex<Option<Arc<ManagedClient>>>,
     cancel_token: CancelToken,
@@ -31,29 +30,24 @@ pub struct PostgresConnection {
 }
 
 impl PostgresConnection {
-    pub(crate) async fn open(config: &ConnectionConfig) -> Result<Self, DriverError> {
-        let connector = Arc::new(Connector::new(config).await?);
+    pub(crate) async fn open(
+        flavor: Flavor,
+        config: &ConnectionConfig,
+    ) -> Result<Self, DriverError> {
+        let connector = Arc::new(Connector::new(flavor, config).await?);
         let session = connector.open(connector.configured_database()).await?;
-        let (version, default_database, cancel_token) = {
+        let (identity, cancel_token) = {
             let client = session.read().await;
-            let row = client
-                .query_one(SERVER_IDENTITY_SQL, &[])
-                .await
-                .map_err(map_error)?;
-            let version: String = read_column(&row, 0)?;
-            let database: String = read_column(&row, 1)?;
-            (version, database, client.cancel_token())
+            (identify_server(&client).await?, client.cancel_token())
         };
         let data_clients = DataClients::new(connector.clone());
-        data_clients.get(&default_database).await?;
+        data_clients.get(&identity.database).await?;
         Ok(Self {
             connector,
-            default_database,
+            default_database: identity.database,
             builder: SqlBuilder::new(Dialect::Postgres, ParamStyle::Inline),
-            server_info: ServerInfo {
-                product: PRODUCT_NAME.to_owned(),
-                version,
-            },
+            server_flavor: identity.flavor,
+            server_info: flavor.server_info(identity.flavor, &identity.version),
             session: Mutex::new(Some(Arc::new(session))),
             cancel_token,
             data_clients,

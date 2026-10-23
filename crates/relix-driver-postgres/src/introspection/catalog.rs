@@ -4,12 +4,12 @@
  */
 
 use crate::errors::map_error;
+use crate::flavor::Flavor;
+use crate::introspection::timescale;
 use crate::row_reader::read_column;
 use relix_core::{DatabaseInfo, ObjectInfo, ObjectKind, TableRef};
 use relix_driver_api::DriverError;
 use tokio_postgres::Client;
-
-const SYSTEM_SCHEMAS: [&str; 2] = ["pg_catalog", "information_schema"];
 
 macro_rules! visible_schema_condition {
     () => {
@@ -65,17 +65,21 @@ pub(crate) async fn list_databases(
         .collect()
 }
 
-pub(crate) async fn list_schemas(client: &Client) -> Result<Vec<String>, DriverError> {
+pub(crate) async fn list_schemas(
+    client: &Client,
+    flavor: Flavor,
+) -> Result<Vec<String>, DriverError> {
     let rows = client.query(SCHEMAS_SQL, &[]).await.map_err(map_error)?;
     let schemas = rows
         .iter()
         .map(|row| read_column(row, 0))
         .collect::<Result<Vec<String>, _>>()?;
-    Ok(order_schemas(schemas))
+    Ok(order_schemas(schemas, flavor.system_schemas()))
 }
 
 pub(crate) async fn list_objects(
     client: &Client,
+    flavor: Flavor,
     database: &str,
     schema: Option<&str>,
 ) -> Result<Vec<ObjectInfo>, DriverError> {
@@ -99,20 +103,25 @@ pub(crate) async fn list_objects(
             comment: read_column(row, 3)?,
         });
     }
+    if flavor.may_have_timescale_catalog()
+        && let Some(timescale) = timescale::load_catalog(client, schema).await?
+    {
+        timescale.annotate(&mut objects);
+    }
     Ok(objects)
 }
 
-pub(crate) fn order_schemas(mut schemas: Vec<String>) -> Vec<String> {
+pub(crate) fn order_schemas(mut schemas: Vec<String>, system_schemas: &[&str]) -> Vec<String> {
     schemas.sort_by(|left, right| {
-        system_rank(left)
-            .cmp(&system_rank(right))
+        system_rank(left, system_schemas)
+            .cmp(&system_rank(right, system_schemas))
             .then_with(|| left.cmp(right))
     });
     schemas
 }
 
-fn system_rank(schema: &str) -> usize {
-    SYSTEM_SCHEMAS
+fn system_rank(schema: &str, system_schemas: &[&str]) -> usize {
+    system_schemas
         .iter()
         .position(|system| *system == schema)
         .map_or(0, |position| position + 1)
@@ -151,8 +160,20 @@ mod tests {
             "app".to_owned(),
         ];
         assert_eq!(
-            order_schemas(schemas),
+            order_schemas(schemas.clone(), Flavor::Postgres.system_schemas()),
             vec!["app", "public", "pg_catalog", "information_schema"]
+        );
+        let mut cockroach = schemas;
+        cockroach.push("crdb_internal".to_owned());
+        assert_eq!(
+            order_schemas(cockroach, Flavor::CockroachDb.system_schemas()),
+            vec![
+                "app",
+                "public",
+                "pg_catalog",
+                "information_schema",
+                "crdb_internal"
+            ]
         );
     }
 }

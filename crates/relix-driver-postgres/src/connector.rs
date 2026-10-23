@@ -3,8 +3,8 @@
  * @since 23.10.2026
  */
 
-use crate::driver::DEFAULT_PORT;
 use crate::errors::{is_tls_failure, map_error};
+use crate::flavor::Flavor;
 use crate::managed_client::ManagedClient;
 use crate::server_name_tls::ServerNameTls;
 use crate::tls::tls_connector;
@@ -15,7 +15,6 @@ use tokio_postgres::config::SslMode;
 use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use tokio_postgres::{CancelToken, Config, NoTls, Socket};
 
-const DEFAULT_USER: &str = "postgres";
 const APPLICATION_NAME: &str = "relix";
 
 pub(crate) struct Connector {
@@ -27,16 +26,20 @@ pub(crate) struct Connector {
 }
 
 impl Connector {
-    pub(crate) async fn new(config: &ConnectionConfig) -> Result<Self, DriverError> {
+    pub(crate) async fn new(
+        flavor: Flavor,
+        config: &ConnectionConfig,
+    ) -> Result<Self, DriverError> {
         let settings = &config.settings;
-        let user = non_empty(settings.username.as_deref()).unwrap_or(DEFAULT_USER);
+        let user = non_empty(settings.username.as_deref()).unwrap_or(flavor.default_user());
         let configured_database = non_empty(settings.database.as_deref())
+            .or(flavor.default_database())
             .unwrap_or(user)
             .to_owned();
         let timeout = settings.connect_timeout();
         let mut base = Config::new();
         base.host(config.host_or_default())
-            .port(settings.port.unwrap_or(DEFAULT_PORT))
+            .port(settings.port.unwrap_or(flavor.default_port()))
             .user(user)
             .application_name(APPLICATION_NAME)
             .connect_timeout(timeout);
@@ -133,10 +136,27 @@ mod tests {
             },
             ..ConnectionSettings::default()
         };
-        let connector = Connector::new(&ConnectionConfig::new(settings, None))
+        let connector = Connector::new(Flavor::Postgres, &ConnectionConfig::new(settings, None))
             .await
             .unwrap();
         assert_eq!(connector.configured_database(), "alice");
-        assert_eq!(connector.base.get_ports(), &[DEFAULT_PORT]);
+        assert_eq!(connector.base.get_ports(), &[5432]);
+    }
+
+    #[tokio::test]
+    async fn cockroach_defaults_to_root_and_defaultdb() {
+        let settings = ConnectionSettings {
+            tls: TlsSettings {
+                mode: TlsMode::Disable,
+                ca_certificate: None,
+            },
+            ..ConnectionSettings::default()
+        };
+        let connector = Connector::new(Flavor::CockroachDb, &ConnectionConfig::new(settings, None))
+            .await
+            .unwrap();
+        assert_eq!(connector.configured_database(), "defaultdb");
+        assert_eq!(connector.base.get_user(), Some("root"));
+        assert_eq!(connector.base.get_ports(), &[26257]);
     }
 }
