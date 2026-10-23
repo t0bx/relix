@@ -1987,6 +1987,7 @@ dependencies = [
  "relix-config",
  "relix-core",
  "relix-driver-api",
+ "relix-driver-sqlite",
  "relix-editor",
  "relix-project",
  "relix-query",
@@ -2183,6 +2184,7 @@ dependencies = [
 name = "relix-testing"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "relix-core",
  "relix-driver-api",
 ]
