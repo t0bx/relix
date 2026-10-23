@@ -3288,6 +3288,7 @@ dependencies = [
  "relix-driver-mysql",
  "relix-driver-postgres",
  "relix-driver-redis",
+ "relix-driver-search",
  "relix-driver-sqlite",
  "relix-project",
  "relix-tui",

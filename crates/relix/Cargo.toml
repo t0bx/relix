@@ -26,6 +26,7 @@ relix-driver-manager = { path = "../relix-driver-manager" }
 relix-driver-mysql = { path = "../relix-driver-mysql" }
 relix-driver-postgres = { path = "../relix-driver-postgres" }
 relix-driver-redis = { path = "../relix-driver-redis" }
+relix-driver-search = { path = "../relix-driver-search" }
 relix-driver-sqlite = { path = "../relix-driver-sqlite" }
 relix-project.workspace = true
 relix-tui = { path = "../relix-tui" }
