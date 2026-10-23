@@ -1,0 +1,26 @@
+[package]
+name = "relix-driver-clickhouse"
+description = "ClickHouse driver for the RELIX database IDE (HTTP interface)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+relix-core.workspace = true
+relix-driver-api.workspace = true
+relix-driver-http = { path = "../relix-driver-http" }
+relix-query = { path = "../relix-query" }
+async-trait.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
+tokio.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+relix-testing = { path = "../relix-testing" }
+tokio.workspace = true
+
+[lints]
+workspace = true
