@@ -1,0 +1,24 @@
+[package]
+name = "relix-tls-relay"
+description = "Local TLS relay that gives RELIX drivers without a pluggable TLS stack rustls encryption"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+relix-core.workspace = true
+relix-driver-api.workspace = true
+relix-tls = { path = "../relix-tls" }
+rustls-pki-types = { version = "1.15.1", features = ["std"] }
+tokio = { workspace = true, features = ["net"] }
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12"] }
+
+[dev-dependencies]
+rcgen = "0.14.10"
+tokio.workspace = true
+
+[lints]
+workspace = true
