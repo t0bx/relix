@@ -54,6 +54,7 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
         TunnelManager::new(HostKeyStore::new(paths.known_hosts_file())),
         VpnManager::system(paths.vpn_runtime_dir()),
     );
+    let exit_network = network.clone();
     let context = AppContext {
         store: ProjectStore::new(paths.projects_dir()),
         paths,
@@ -71,6 +72,10 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
         relix_tui::run(&mut app, receiver, &mut guard)
             .await
             .context("terminal error")
+    });
+    runtime.block_on(async {
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        exit_network.shutdown().await;
     });
     runtime.shutdown_timeout(std::time::Duration::from_secs(2));
     tracing::info!("relix stopped");

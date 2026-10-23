@@ -126,6 +126,10 @@ impl ConnectionManager {
         Ok(self.tunnels.verify(chain, secrets).await?)
     }
 
+    pub async fn shutdown(&self) {
+        self.vpn.shutdown().await;
+    }
+
     pub fn trust_host_key(&self, prompt: &HostKeyPrompt) -> Result<(), SshError> {
         self.tunnels.trust_host_key(prompt)
     }
