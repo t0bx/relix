@@ -10,6 +10,7 @@ use anyhow::Context;
 use relix_app::app::EVENT_QUEUE_CAPACITY;
 use relix_app::{App, AppContext};
 use relix_config::{AppPaths, GlobalSettings, ThemeCatalog};
+use relix_connections::{ConnectionManager, HostKeyStore, TunnelManager, VpnManager};
 use relix_driver_manager::{
     DownloadProgress, DriverManager, HttpsFetcher, ManagerError, PackageFetcher, RegistrySource,
 };
@@ -49,11 +50,16 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
         .context("cannot start the async runtime")?;
     let manager = build_driver_manager(&paths, &settings, &mut warnings);
     let (sender, receiver) = mpsc::channel(EVENT_QUEUE_CAPACITY);
+    let network = ConnectionManager::new(
+        TunnelManager::new(HostKeyStore::new(paths.known_hosts_file())),
+        VpnManager::system(paths.vpn_runtime_dir()),
+    );
     let context = AppContext {
         store: ProjectStore::new(paths.projects_dir()),
         paths,
         secrets: Arc::new(FallbackSecretStore::default()),
         drivers: Arc::new(ManagerDriverService::new(manager)),
+        network,
         clipboard: Box::new(Osc52Clipboard::default()),
         runtime: runtime.handle().clone(),
         events: sender,

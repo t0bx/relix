@@ -19,6 +19,7 @@ path = "src/main.rs"
 [dependencies]
 relix-app = { path = "../relix-app" }
 relix-config.workspace = true
+relix-connections = { path = "../relix-connections" }
 relix-core.workspace = true
 relix-driver-api.workspace = true
 relix-driver-manager = { path = "../relix-driver-manager" }
