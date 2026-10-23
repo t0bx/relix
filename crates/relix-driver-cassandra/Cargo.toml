@@ -1,0 +1,27 @@
+[package]
+name = "relix-driver-cassandra"
+description = "Native Apache Cassandra and ScyllaDB driver for the RELIX database IDE"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+relix-core.workspace = true
+relix-driver-api.workspace = true
+relix-tls-relay = { path = "../relix-tls-relay" }
+async-trait.workspace = true
+chrono = { version = "0.4.45", default-features = false, features = ["std"] }
+futures-util = { version = "0.3.31", default-features = false }
+scylla = { version = "1.9.0", default-features = false }
+tokio.workspace = true
+
+[dev-dependencies]
+relix-testing = { path = "../relix-testing" }
+pretty_assertions.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true
