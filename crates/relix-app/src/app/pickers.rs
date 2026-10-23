@@ -104,7 +104,7 @@ impl App {
             .iter()
             .filter(|source| {
                 self.capabilities(source.id)
-                    .is_none_or(|capabilities| capabilities.is_relational())
+                    .is_none_or(|capabilities| capabilities.query_execution)
             })
             .map(|source| PickerItem {
                 label: source.name.clone(),
@@ -195,6 +195,7 @@ impl App {
             PickerValue::History(index) => self.use_history_entry(index, alternate),
             PickerValue::Driver(id) => self.driver_selected(&id),
             PickerValue::Filter(filter) => self.apply_filter_from_history(&filter),
+            PickerValue::DocumentIndex { tab, name } => self.confirm_drop_document_index(tab, name),
             PickerValue::Export(format) => {
                 let Some(tab) = self.workspace.active_tab_id() else {
                     return;

@@ -740,6 +740,8 @@ impl App {
             TextEditAction::GridCell { tab, row, column } => {
                 self.stage_cell_text(tab, row, column, text)
             }
+            TextEditAction::Document { tab, key } => self.save_document_edit(tab, key, text),
+            TextEditAction::DocumentIndex { tab } => self.save_index_definition(tab, text),
         }
     }
 

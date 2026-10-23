@@ -3556,6 +3556,7 @@ dependencies = [
  "relix-core",
  "relix-driver-api",
  "russh",
+ "serde_json",
  "tokio",
 ]
 
@@ -3584,6 +3585,7 @@ dependencies = [
  "relix-editor",
  "relix-query",
  "relix-testing",
+ "serde_json",
  "tempfile",
  "tokio",
  "tracing",

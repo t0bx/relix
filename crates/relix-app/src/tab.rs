@@ -3,6 +3,7 @@
  * @since 23.10.2026
  */
 
+use crate::document_tab::DocumentTab;
 use crate::editor_tab::{EditorFocus, EditorTab};
 use crate::grid::GridState;
 use crate::keyvalue_tab::KeyValueTab;
@@ -14,6 +15,7 @@ pub enum Tab {
     Editor(Box<EditorTab>),
     Table(Box<TableTab>),
     KeyValue(Box<KeyValueTab>),
+    Document(Box<DocumentTab>),
 }
 
 impl Tab {
@@ -31,6 +33,7 @@ impl Tab {
                 format!("{}{}", table.title(), if pending { "*" } else { "" })
             }
             Self::KeyValue(_) => "keys".to_owned(),
+            Self::Document(tab) => tab.title(),
         }
     }
 
@@ -39,6 +42,7 @@ impl Tab {
             Self::Editor(editor) => editor.data_source,
             Self::Table(table) => Some(table.data_source),
             Self::KeyValue(tab) => Some(tab.data_source),
+            Self::Document(tab) => Some(tab.data_source),
         }
     }
 
@@ -73,6 +77,13 @@ impl Tab {
     pub fn as_table_mut(&mut self) -> Option<&mut TableTab> {
         match self {
             Self::Table(table) => Some(table),
+            _ => None,
+        }
+    }
+
+    pub fn as_document_mut(&mut self) -> Option<&mut DocumentTab> {
+        match self {
+            Self::Document(tab) => Some(tab),
             _ => None,
         }
     }

@@ -91,6 +91,7 @@ impl App {
             Some(Tab::Editor(_)) => self.results_command(command),
             Some(Tab::Table(_)) => self.table_command(command),
             Some(Tab::KeyValue(_)) => self.key_value_command(command),
+            Some(Tab::Document(_)) => self.document_command(command),
             None => {
                 if command == Command::Filter {
                     self.focus_explorer();
@@ -107,6 +108,7 @@ impl App {
             (Focus::Workspace, Some(Tab::Editor(_))) => self.run_editor(script, false),
             (Focus::Workspace, Some(Tab::Table(_))) => self.reload_table_page(),
             (Focus::Workspace, Some(Tab::KeyValue(_))) => self.submit_console_command(),
+            (Focus::Workspace, Some(Tab::Document(_))) => self.document_command(Command::Refresh),
             (Focus::Workspace, None) => {}
         }
     }

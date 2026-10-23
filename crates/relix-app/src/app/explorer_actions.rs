@@ -187,10 +187,13 @@ impl App {
                 self.inspect_selected();
             }
             NodeKind::KeySpace(source) => self.open_key_value_tab(source, new_pane),
+            NodeKind::Collection { source, info } => {
+                self.open_document_tab(source, info.collection, info.kind, new_pane);
+            }
             NodeKind::DataSource(source)
                 if self
                     .capabilities(source)
-                    .is_some_and(|capabilities| !capabilities.is_relational()) =>
+                    .is_some_and(|capabilities| capabilities.is_key_value()) =>
             {
                 self.open_key_value_tab(source, new_pane);
             }

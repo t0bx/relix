@@ -373,16 +373,20 @@ impl App {
             self.notify(Level::Info, "choose a data source for this query tab");
             return;
         };
-        if self
-            .capabilities(source)
-            .is_some_and(|capabilities| !capabilities.is_relational())
-        {
-            self.notify(
-                Level::Info,
-                "this data source uses the key browser and command console",
-            );
-            self.open_key_value_tab(source, false);
-            return;
+        match self.capabilities(source) {
+            Some(capabilities) if capabilities.is_key_value() => {
+                self.notify(
+                    Level::Info,
+                    "this data source uses the key browser and command console",
+                );
+                self.open_key_value_tab(source, false);
+                return;
+            }
+            Some(capabilities) if !capabilities.query_execution => {
+                self.notify(Level::Info, "this data source has no query console");
+                return;
+            }
+            _ => {}
         }
         let dialect = self.dialect(source);
         let statements = editor_statements(editor, dialect, script);

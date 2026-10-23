@@ -90,13 +90,24 @@ impl App {
             } => self.on_key_written(tab, result, rescan),
             AppEvent::CommandReplied { tab, result } => self.on_command_replied(tab, result),
             AppEvent::ServerDetails { tab, result } => self.on_server_details(tab, result),
+            AppEvent::DocumentsLoaded {
+                tab,
+                request,
+                result,
+            } => self.on_documents_loaded(tab, request, result),
+            AppEvent::DocumentWritten { tab, result } => self.on_document_written(tab, result),
+            AppEvent::CollectionDescribed {
+                tab,
+                choose_index_to_drop,
+                result,
+            } => self.on_collection_described(tab, choose_index_to_drop, result),
         }
     }
 
     pub(crate) fn load_catalog(&mut self, source: DataSourceId) {
         let Some(capabilities) = self
             .capabilities(source)
-            .filter(|capabilities| capabilities.is_relational())
+            .filter(|capabilities| capabilities.is_tabular())
         else {
             return;
         };

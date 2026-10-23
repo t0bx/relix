@@ -4,6 +4,7 @@
  */
 
 use super::{App, Focus, HitTarget};
+use crate::document_tab::DocumentTab;
 use crate::editor_tab::{EditorFocus, EditorTab};
 use crate::events::{MouseInput, MouseKind};
 use crate::keyvalue_tab::KeyValueTab;
@@ -107,6 +108,11 @@ impl App {
             Some(Tab::KeyValue(tab)) => {
                 Some(Tab::KeyValue(Box::new(KeyValueTab::new(tab.data_source))))
             }
+            Some(Tab::Document(tab)) => Some(Tab::Document(Box::new(DocumentTab::new(
+                tab.data_source,
+                tab.collection.clone(),
+                tab.kind,
+            )))),
             Some(Tab::Editor(editor)) => Some(Tab::Editor(Box::new(EditorTab::new(
                 self.next_console_title(),
                 editor.data_source,
@@ -126,6 +132,7 @@ impl App {
         match self.workspace.tab(tab) {
             Some(Tab::Table(_)) => self.load_table(tab),
             Some(Tab::KeyValue(_)) => self.start_key_scan(tab, true),
+            Some(Tab::Document(_)) => self.load_documents(tab),
             _ => {}
         }
     }
@@ -264,6 +271,7 @@ impl App {
                 Some(Tab::Editor(_)) => self.results_raw_key(chord),
                 Some(Tab::Table(_)) => self.table_raw_key(chord),
                 Some(Tab::KeyValue(_)) => self.key_value_raw_key(chord),
+                Some(Tab::Document(_)) => self.document_raw_key(chord),
                 None => {}
             },
         }
@@ -407,6 +415,11 @@ fn paste_into_tab_input(tab: &mut Tab, text: &str) {
             crate::keyvalue_tab::KeyValueFocus::Console => tab.console_input.insert_str(text),
             _ => {}
         },
+        Tab::Document(tab) => {
+            if tab.focus == crate::document_tab::DocumentFocus::Filter {
+                tab.filter.insert_str(text);
+            }
+        }
         Tab::Editor(_) => {}
     }
 }

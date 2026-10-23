@@ -7,6 +7,7 @@ pub mod app;
 pub mod buffer_keys;
 pub mod command;
 pub mod datasource_form;
+pub mod document_tab;
 pub mod editor_tab;
 pub mod events;
 pub mod explorer;

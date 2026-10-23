@@ -5,6 +5,7 @@
 
 use super::App;
 use super::connections::ConnectionStatus;
+use crate::document_tab::DocumentTab;
 use crate::editor_tab::EditorTab;
 use crate::grid::{GridState, GridView};
 use crate::input::LineInput;
@@ -16,8 +17,8 @@ use crate::workspace::{LayoutNode, Pane, PaneId, TabId, Workspace};
 use relix_core::ProjectId;
 use relix_editor::Position;
 use relix_project::{
-    EditorSnapshot, KeyValueSnapshot, LayoutSnapshot, PaneSnapshot, ProjectError, SessionState,
-    TabSnapshot, TableSnapshot,
+    DocumentSnapshot, EditorSnapshot, KeyValueSnapshot, LayoutSnapshot, PaneSnapshot, ProjectError,
+    SessionState, TabSnapshot, TableSnapshot,
 };
 use std::collections::BTreeMap;
 
@@ -138,6 +139,12 @@ impl App {
             Tab::KeyValue(tab) => TabSnapshot::KeyValue(KeyValueSnapshot {
                 data_source: tab.data_source,
                 pattern: tab.pattern.text().to_owned(),
+            }),
+            Tab::Document(tab) => TabSnapshot::Document(DocumentSnapshot {
+                data_source: tab.data_source,
+                collection: tab.collection.clone(),
+                collection_kind: tab.kind,
+                filter: tab.filter.text().to_owned(),
             }),
         })
     }
@@ -285,6 +292,17 @@ impl RestoreBuilder {
                     tab.pattern = LineInput::with_text(&kv.pattern);
                     Tab::KeyValue(Box::new(tab))
                 }),
+                TabSnapshot::Document(snapshot) => {
+                    app.data_source(snapshot.data_source).map(|_| {
+                        let mut tab = DocumentTab::new(
+                            snapshot.data_source,
+                            snapshot.collection.clone(),
+                            snapshot.collection_kind,
+                        );
+                        tab.filter = LineInput::with_text(&snapshot.filter);
+                        Tab::Document(Box::new(tab))
+                    })
+                }
             };
             if let Some(restored) = restored {
                 let tab_id = self.allocate();

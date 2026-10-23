@@ -6,7 +6,8 @@
 use crate::explorer::{DetailKind, FolderKind, NewNode, NodeKind};
 use relix_core::{DataSourceId, Dialect, ObjectInfo, ObjectKind, TableDetails};
 use relix_driver_api::{
-    DatabaseConnection, DriverCapabilities, DriverError, KeyValueConnection, SqlConnection,
+    DatabaseConnection, DocumentConnection, DriverCapabilities, DriverError, KeyValueConnection,
+    SqlConnection,
 };
 use relix_editor::{CatalogColumn, CatalogTable, CompletionCatalog};
 
@@ -23,6 +24,14 @@ pub fn sql(connection: &dyn DatabaseConnection) -> Result<&dyn SqlConnection, Dr
     connection
         .as_sql()
         .ok_or_else(|| DriverError::unsupported("this data source does not support SQL"))
+}
+
+pub fn document(
+    connection: &dyn DatabaseConnection,
+) -> Result<&dyn DocumentConnection, DriverError> {
+    connection
+        .as_document()
+        .ok_or_else(|| DriverError::unsupported("this data source is not a document store"))
 }
 
 pub fn key_value(
@@ -43,7 +52,50 @@ pub async fn load_children(
     parent_key: &str,
 ) -> Result<Vec<NewNode>, DriverError> {
     match kind {
-        NodeKind::DataSource(source) if !capabilities.is_relational() => Ok(vec![
+        NodeKind::DataSource(source) if capabilities.is_document() => {
+            let namespaces = document(connection)?.namespaces().await?;
+            Ok(namespaces
+                .into_iter()
+                .map(|namespace| {
+                    let node = NewNode::new(
+                        format!("{parent_key}/ns:{}", namespace.name),
+                        namespace.name.clone(),
+                        NodeKind::Namespace {
+                            source: *source,
+                            name: namespace.name,
+                        },
+                    );
+                    if namespace.is_default {
+                        node.with_detail("default")
+                    } else {
+                        node
+                    }
+                })
+                .collect())
+        }
+        NodeKind::Namespace { source, name } => {
+            let mut collections = document(connection)?.collections(name).await?;
+            collections.sort_by(|a, b| a.collection.name.cmp(&b.collection.name));
+            Ok(collections
+                .into_iter()
+                .map(|info| {
+                    let count = info
+                        .document_count
+                        .map(|count| format!(" · {count}"))
+                        .unwrap_or_default();
+                    NewNode::new(
+                        format!("{parent_key}/{}", info.collection.name),
+                        info.collection.name.clone(),
+                        NodeKind::Collection {
+                            source: *source,
+                            info: info.clone(),
+                        },
+                    )
+                    .with_detail(format!("{}{count}", info.kind.label()))
+                })
+                .collect())
+        }
+        NodeKind::DataSource(source) if capabilities.is_key_value() => Ok(vec![
             NewNode::new(
                 format!("{parent_key}/keys"),
                 "keys",

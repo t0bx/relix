@@ -6,6 +6,9 @@
 mod command_dispatch;
 mod connections;
 mod datasources;
+mod document_actions;
+#[cfg(test)]
+mod document_workflow_tests;
 mod drivers;
 mod editor_actions;
 mod event_dispatch;
@@ -31,6 +34,7 @@ mod table_actions;
 mod tests;
 
 use crate::command::KeyContext;
+use crate::document_tab::DocumentFocus;
 use crate::editor_tab::EditorFocus;
 use crate::events::{AppEvent, InputEvent};
 use crate::explorer::ExplorerState;
@@ -277,6 +281,7 @@ impl App {
                 Some(Tab::KeyValue(tab)) => {
                     matches!(tab.focus, KeyValueFocus::Pattern | KeyValueFocus::Console)
                 }
+                Some(Tab::Document(tab)) => tab.focus == DocumentFocus::Filter,
                 None => false,
             },
         }
@@ -305,6 +310,7 @@ impl App {
             (Focus::Sidebar, _) => navigable(KeyContext::Explorer),
             (Focus::Workspace, Some(Tab::Editor(_) | Tab::Table(_))) => navigable(KeyContext::Grid),
             (Focus::Workspace, Some(Tab::KeyValue(_))) => navigable(KeyContext::KeyValue),
+            (Focus::Workspace, Some(Tab::Document(_))) => navigable(KeyContext::Document),
             (Focus::Workspace, None) => vec![KeyContext::NonText, KeyContext::Global],
         }
     }

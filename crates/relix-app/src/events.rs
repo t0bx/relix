@@ -10,7 +10,10 @@ use crate::workspace::TabId;
 use relix_config::KeyChord;
 use relix_connections::{ConnectionError, NetworkPlan, VpnError};
 use relix_core::keyvalue::{CommandReply, KeyDescription, KeyName, KeyScanPage, ValuePage};
-use relix_core::{ChangeReport, DataSourceId, DriverId, RowBatch, ServerConfigId, TableDetails};
+use relix_core::{
+    ChangeReport, CollectionDetails, DataSourceId, DocumentPage, DocumentWriteOutcome, DriverId,
+    RowBatch, ServerConfigId, TableDetails,
+};
 use relix_driver_api::{DatabaseConnection, DriverError, ServerInfo};
 use relix_editor::{CatalogColumn, CompletionCatalog};
 use relix_query::{ScriptOutcome, StatementReport};
@@ -142,6 +145,20 @@ pub enum AppEvent {
     CommandReplied {
         tab: TabId,
         result: Result<CommandReply, DriverError>,
+    },
+    DocumentsLoaded {
+        tab: TabId,
+        request: RequestId,
+        result: Result<DocumentPage, DriverError>,
+    },
+    DocumentWritten {
+        tab: TabId,
+        result: Result<DocumentWriteOutcome, DriverError>,
+    },
+    CollectionDescribed {
+        tab: TabId,
+        choose_index_to_drop: bool,
+        result: Result<CollectionDetails, DriverError>,
     },
     ServerDetails {
         tab: TabId,

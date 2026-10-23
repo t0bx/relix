@@ -5,7 +5,8 @@
 
 use crate::input::LineInput;
 use relix_core::{
-    ColumnInfo, DataSourceId, ForeignKeyInfo, IndexInfo, ObjectInfo, ObjectKind, TableRef,
+    CollectionInfo, ColumnInfo, DataSourceId, ForeignKeyInfo, IndexInfo, ObjectInfo, ObjectKind,
+    TableRef,
 };
 use std::collections::HashSet;
 
@@ -94,6 +95,14 @@ pub enum NodeKind {
     Index(IndexInfo),
     ForeignKey(ForeignKeyInfo),
     KeySpace(DataSourceId),
+    Namespace {
+        source: DataSourceId,
+        name: String,
+    },
+    Collection {
+        source: DataSourceId,
+        info: CollectionInfo,
+    },
     Message(String),
 }
 
@@ -105,7 +114,9 @@ impl NodeKind {
             | Self::Schema { source, .. }
             | Self::Folder { source, .. }
             | Self::Object { source, .. }
-            | Self::Detail { source, .. } => Some(*source),
+            | Self::Detail { source, .. }
+            | Self::Namespace { source, .. }
+            | Self::Collection { source, .. } => Some(*source),
             _ => None,
         }
     }
@@ -116,6 +127,7 @@ impl NodeKind {
             | Self::Index(_)
             | Self::ForeignKey(_)
             | Self::KeySpace(_)
+            | Self::Collection { .. }
             | Self::Message(_) => true,
             Self::Object { info, .. } => !info.kind.is_relation(),
             _ => false,

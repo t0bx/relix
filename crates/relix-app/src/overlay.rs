@@ -27,6 +27,7 @@ pub enum PickerValue {
     Driver(DriverId),
     Filter(String),
     Export(ExportFormat),
+    DocumentIndex { tab: TabId, name: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,6 +55,7 @@ pub enum PickerPurpose {
     Drivers,
     FilterHistory,
     ExportFormat,
+    DocumentIndexes,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -159,6 +161,14 @@ pub enum PendingAction {
         retry: Option<DataSourceId>,
     },
     ConnectVpn(ServerConfigId),
+    DeleteDocument {
+        tab: TabId,
+        key: serde_json::Value,
+    },
+    DropDocumentIndex {
+        tab: TabId,
+        name: String,
+    },
     DeleteServerConfig(ServerConfigId),
     TransferServerConfig {
         id: ServerConfigId,
@@ -253,6 +263,13 @@ pub enum TextEditAction {
         tab: TabId,
         row: usize,
         column: usize,
+    },
+    Document {
+        tab: TabId,
+        key: Option<serde_json::Value>,
+    },
+    DocumentIndex {
+        tab: TabId,
     },
 }
 

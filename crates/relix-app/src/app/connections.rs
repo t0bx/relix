@@ -40,6 +40,7 @@ pub(crate) enum Deferred {
     RunEditor { tab: TabId, script: bool },
     LoadTable(TabId),
     ScanKeys(TabId),
+    LoadDocuments(TabId),
 }
 
 pub struct ConnectionState {
@@ -344,6 +345,7 @@ impl App {
                 }
                 Deferred::LoadTable(tab) => self.load_table(tab),
                 Deferred::ScanKeys(tab) => self.start_key_scan(tab, true),
+                Deferred::LoadDocuments(tab) => self.load_documents(tab),
             }
         }
     }

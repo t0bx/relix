@@ -12,6 +12,7 @@ pub enum KeyContext {
     Editor,
     Grid,
     KeyValue,
+    Document,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -124,6 +125,8 @@ pub enum Command {
     EditValue,
     SetTtl,
     FocusConsole,
+    CreateIndex,
+    DropIndex,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1029,6 +1032,77 @@ pub static COMMANDS: &[CommandSpec] = &[
         &[":"],
     ),
     spec(C::CopyCell, "kv.copy", "Copy value", K::KeyValue, &["y"]),
+    spec(
+        C::Activate,
+        "doc.open",
+        "Edit document",
+        K::Document,
+        &["enter"],
+    ),
+    spec(
+        C::CreateKey,
+        "doc.insert",
+        "Insert document",
+        K::Document,
+        &["a", "insert"],
+    ),
+    spec(
+        C::EditValue,
+        "doc.edit",
+        "Edit document",
+        K::Document,
+        &["e"],
+    ),
+    spec(
+        C::DeleteKey,
+        "doc.delete",
+        "Delete document",
+        K::Document,
+        &["d", "delete"],
+    ),
+    spec(C::Filter, "doc.filter", "Edit filter", K::Document, &["/"]),
+    spec(
+        C::NextPage,
+        "doc.next_page",
+        "Next page",
+        K::Document,
+        &["]", "n"],
+    ),
+    spec(
+        C::PreviousPage,
+        "doc.previous_page",
+        "Previous page",
+        K::Document,
+        &["[", "p"],
+    ),
+    spec(
+        C::InspectObject,
+        "doc.details",
+        "Collection details and indexes",
+        K::Document,
+        &["i"],
+    ),
+    spec(
+        C::CreateIndex,
+        "doc.create_index",
+        "Create index",
+        K::Document,
+        &["+"],
+    ),
+    spec(
+        C::DropIndex,
+        "doc.drop_index",
+        "Drop index",
+        K::Document,
+        &["-"],
+    ),
+    spec(
+        C::CopyCell,
+        "doc.copy",
+        "Copy document JSON",
+        K::Document,
+        &["y"],
+    ),
 ];
 
 pub fn spec_for(command: Command) -> Option<&'static CommandSpec> {
