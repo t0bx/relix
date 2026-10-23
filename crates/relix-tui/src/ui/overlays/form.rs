@@ -8,74 +8,56 @@ use crate::ui::widgets::{bold, centered, input, popup, put};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
-use relix_app::datasource_form::{DataSourceForm, FieldValue};
+use relix_app::form::{FieldValue, FormView};
 
-const LABEL_WIDTH: u16 = 15;
+const LABEL_WIDTH: u16 = 17;
 
-pub fn draw(frame: &mut Frame<'_>, area: Rect, form: &DataSourceForm, ui: &UiState) {
+pub fn draw(frame: &mut Frame<'_>, area: Rect, form: &dyn FormView, ui: &UiState) {
     let styles = &ui.styles;
-    let visible = form.visible_indexes();
-    let title = if form.editing.is_some() {
-        "Edit data source"
-    } else {
-        "New data source"
-    };
-    let outer = centered(area, 90, visible.len() as u16 + 5);
-    let inner = popup(frame, styles, outer, title);
+    let rows = form.rows();
+    let outer = centered(area, 92, rows.len() as u16 + 5);
+    let inner = popup(frame, styles, outer, &form.title());
+    let visible_rows = usize::from(inner.height.saturating_sub(2));
+    let focused_row = rows.iter().position(|row| row.focused).unwrap_or(0);
+    let skip = focused_row.saturating_sub(visible_rows.saturating_sub(1));
     let mut cursor = None;
-    for (row, index) in visible.iter().enumerate() {
-        let Some(field) = form.fields.get(*index) else {
-            continue;
-        };
-        let y = inner.y + row as u16;
-        let focused = *index == form.focused;
+    for (offset, row) in rows.iter().skip(skip).take(visible_rows).enumerate() {
+        let y = inner.y + offset as u16;
         let buffer = frame.buffer_mut();
-        let label_style = if focused {
+        let label_style = if row.focused {
             bold(Style::default().fg(styles.accent))
         } else {
             styles.muted()
         };
-        put(
-            buffer,
-            inner.x + 1,
-            y,
-            field.label,
-            LABEL_WIDTH,
-            label_style,
-        );
+        put(buffer, inner.x + 1, y, row.label, LABEL_WIDTH, label_style);
         let value_area = Rect::new(
             inner.x + LABEL_WIDTH + 2,
             y,
             inner.width.saturating_sub(LABEL_WIDTH + 3),
             1,
         );
-        let value_style = if focused {
+        let value_style = if row.focused {
             Style::default()
                 .fg(styles.foreground)
                 .bg(styles.cursor_line)
         } else {
             styles.panel()
         };
-        match &field.value {
-            FieldValue::Text(text) => {
-                let position = input(buffer, value_area, text, value_style, false);
-                if focused {
-                    cursor = Some(position);
-                }
-            }
-            FieldValue::Secret(text) => {
-                let position = input(buffer, value_area, text, value_style, true);
-                if text.is_empty() && form.editing.is_some() && !form.password_touched {
+        match row.value {
+            FieldValue::Text(text) | FieldValue::Secret(text) => {
+                let masked = matches!(row.value, FieldValue::Secret(_));
+                let position = input(buffer, value_area, text, value_style, masked);
+                if let Some(placeholder) = row.placeholder.filter(|_| text.is_empty()) {
                     put(
                         buffer,
                         value_area.x,
                         y,
-                        "(unchanged)",
+                        placeholder,
                         value_area.width,
                         value_style.fg(styles.muted),
                     );
                 }
-                if focused {
+                if row.focused {
                     cursor = Some(position);
                 }
             }
@@ -106,8 +88,8 @@ pub fn draw(frame: &mut Frame<'_>, area: Rect, form: &DataSourceForm, ui: &UiSta
     }
     let buffer = frame.buffer_mut();
     let status_y = inner.y + inner.height.saturating_sub(2);
-    if let Some(status) = &form.status {
-        let color = if form.testing {
+    if let Some(status) = form.status() {
+        let color = if form.busy() {
             styles.warning
         } else if status.success {
             styles.success
@@ -127,7 +109,7 @@ pub fn draw(frame: &mut Frame<'_>, area: Rect, form: &DataSourceForm, ui: &UiSta
         buffer,
         inner.x + 1,
         inner.y + inner.height.saturating_sub(1),
-        "Tab/↑↓ field · ←→ change · Space toggle · Ctrl+T test · Enter save · Esc cancel",
+        form.footer(),
         inner.width.saturating_sub(2),
         styles.muted(),
     );

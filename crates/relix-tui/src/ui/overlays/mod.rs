@@ -9,6 +9,7 @@ mod help;
 mod jump;
 mod lists;
 mod picker;
+mod servers;
 
 use super::UiState;
 use ratatui::Frame;
@@ -20,7 +21,10 @@ pub fn draw(frame: &mut Frame<'_>, area: Rect, app: &App, ui: &UiState) {
     for overlay in &app.overlays {
         match overlay {
             Overlay::Picker(picker) => picker::draw(frame, area, picker, ui),
-            Overlay::DataSourceForm(form) => form::draw(frame, area, form, ui),
+            Overlay::DataSourceForm(form) => form::draw(frame, area, form.as_ref(), ui),
+            Overlay::ServerManager(state) => servers::draw(frame, area, state, app, ui),
+            Overlay::SshForm(form) => form::draw(frame, area, form.as_ref(), ui),
+            Overlay::VpnForm(form) => form::draw(frame, area, form.as_ref(), ui),
             Overlay::Confirm(confirm) => dialogs::confirm(frame, area, confirm, ui),
             Overlay::Prompt(prompt) => dialogs::prompt(frame, area, prompt, ui),
             Overlay::Viewer(viewer) => dialogs::viewer(frame, area, viewer, ui),

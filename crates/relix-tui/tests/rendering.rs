@@ -168,3 +168,38 @@ async fn data_source_form_and_small_terminal() {
     let tiny = render(&mut harness, 40, 10);
     assert!(tiny.contains("RELIX needs at least"));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn server_configurations_manager_and_ssh_dialog_render() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = harness(&dir);
+    harness.keys("ctrl+k n");
+    let manager = render(&mut harness, 130, 30);
+    println!("{manager}");
+    assert!(manager.contains("Server configurations"));
+    assert!(manager.contains("SSH"));
+    assert!(manager.contains("press n to create an SSH configuration"));
+    harness.keys("n");
+    let dialog = render(&mut harness, 130, 34);
+    println!("{dialog}");
+    assert!(dialog.contains("New SSH configuration"));
+    assert!(dialog.contains("SSH host"));
+    assert!(dialog.contains("Jump host"));
+    assert!(dialog.contains("Host keys"));
+    assert!(dialog.contains("ask on first use"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn data_source_dialog_offers_network_modes() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = harness(&dir);
+    harness.keys("ctrl+k a tab right");
+    let dialog = render(&mut harness, 130, 40);
+    println!("{dialog}");
+    assert!(dialog.contains("New data source"));
+    assert!(dialog.contains("Network"));
+    assert!(dialog.contains("◂ direct ▸"));
+    assert!(dialog.contains("Query timeout"));
+    assert!(dialog.contains("Properties"));
+    assert!(!dialog.contains("SSH config"));
+}

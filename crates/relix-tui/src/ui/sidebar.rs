@@ -171,8 +171,9 @@ fn draw_node(
         right.saturating_sub(x),
         label_style,
     );
-    let detail = match &node.children {
-        Children::Failed(message) => Some((message.clone(), styles.error)),
+    let detail = match (&node.children, &node.kind) {
+        (Children::Failed(message), _) => Some((message.clone(), styles.error)),
+        (_, NodeKind::DataSource(source)) => connection_detail(app, *source, ui),
         _ => node.detail.clone().map(|detail| (detail, styles.muted)),
     };
     if let Some((detail, color)) = detail {
@@ -188,13 +189,32 @@ fn draw_node(
     }
 }
 
+fn connection_detail(
+    app: &App,
+    source: relix_core::DataSourceId,
+    ui: &UiState,
+) -> Option<(String, ratatui::style::Color)> {
+    let styles = &ui.styles;
+    let indicator = app.connection_indicator(source)?;
+    let color = if indicator.degraded {
+        styles.warning
+    } else {
+        styles.muted
+    };
+    Some((indicator.label, color))
+}
+
 fn icon(kind: &NodeKind, app: &App, ui: &UiState) -> (&'static str, ratatui::style::Color) {
     let styles = &ui.styles;
     let unicode = app.settings.ui.unicode_icons;
     let pick = |fancy: &'static str, plain: &'static str| if unicode { fancy } else { plain };
     match kind {
         NodeKind::DataSource(source) => {
+            let degraded = app
+                .connection_indicator(*source)
+                .is_some_and(|indicator| indicator.degraded);
             let color = match app.connection_status(*source) {
+                ConnectionStatus::Connected if degraded => styles.warning,
                 ConnectionStatus::Connected => styles.success,
                 ConnectionStatus::Connecting => styles.warning,
                 ConnectionStatus::Failed(_) => styles.error,
