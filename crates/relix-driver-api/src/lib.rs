@@ -20,7 +20,8 @@ pub use capabilities::{DatabaseCapability, DriverCapabilities};
 pub use connection::{DatabaseConnection, ServerInfo};
 pub use document::DocumentConnection;
 pub use driver::{
-    ConnectionTarget, DRIVER_API_VERSION, DatabaseDriver, DriverMetadata, DriverOrigin,
+    ConnectionTarget, DRIVER_API_VERSION, DatabaseDriver, DependencyStatus, DriverMetadata,
+    DriverOrigin,
 };
 pub use error::{DriverError, ErrorKind};
 pub use key_value::KeyValueConnection;

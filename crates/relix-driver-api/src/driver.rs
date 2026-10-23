@@ -74,11 +74,34 @@ impl ConnectionTarget {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DependencyStatus {
+    Ready,
+    Missing { component: String, hint: String },
+}
+
+impl DependencyStatus {
+    pub fn is_ready(&self) -> bool {
+        matches!(self, Self::Ready)
+    }
+
+    pub fn describe(&self) -> Option<String> {
+        match self {
+            Self::Ready => None,
+            Self::Missing { component, hint } => Some(format!("{component} is missing: {hint}")),
+        }
+    }
+}
+
 #[async_trait]
 pub trait DatabaseDriver: Send + Sync {
     fn metadata(&self) -> DriverMetadata;
 
     fn capabilities(&self) -> DriverCapabilities;
+
+    fn dependency_status(&self) -> DependencyStatus {
+        DependencyStatus::Ready
+    }
 
     async fn connect(
         &self,
