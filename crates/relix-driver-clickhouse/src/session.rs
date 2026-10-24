@@ -6,12 +6,15 @@
 use crate::client::{ClickHouseClient, QueryRequest, SessionParams};
 use crate::result_reader::QueryOutcome;
 use relix_core::{ConnectionSettings, Dialect};
-use relix_driver_api::DriverError;
+use relix_driver_api::{ConnectionProperty, DriverError};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
 use uuid::Uuid;
 
-const SESSION_TIMEOUT_PROPERTY: &str = "session_timeout";
+pub(crate) const SESSION_TIMEOUT: ConnectionProperty = ConnectionProperty::optional(
+    "session_timeout",
+    "seconds the editor session (SET, USE, temporary tables) survives while idle; default 3600",
+);
 const DEFAULT_SESSION_TIMEOUT_SECS: u64 = 3_600;
 
 /// The editor's ClickHouse session: `SET`, `USE` and temporary tables persist between
@@ -27,7 +30,7 @@ pub(crate) struct EditorSession {
 
 impl EditorSession {
     pub(crate) fn new(settings: &ConnectionSettings) -> Result<Self, DriverError> {
-        let timeout_secs = match settings.property(SESSION_TIMEOUT_PROPERTY) {
+        let timeout_secs = match settings.property(SESSION_TIMEOUT.name) {
             None => DEFAULT_SESSION_TIMEOUT_SECS,
             Some(value) => value.parse().map_err(|_| {
                 DriverError::configuration(format!(

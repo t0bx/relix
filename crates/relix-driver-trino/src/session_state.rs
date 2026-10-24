@@ -5,13 +5,19 @@
 
 use crate::url_codec::{decode, encode};
 use relix_core::ConnectionSettings;
-use relix_driver_api::DriverError;
+use relix_driver_api::{ConnectionProperty, DriverError};
 use relix_driver_http::RequestBuilder;
 use relix_driver_http::header::HeaderMap;
 use std::collections::BTreeMap;
 
-const SCHEMA_PROPERTY: &str = "schema";
-const SESSION_PROPERTIES_PROPERTY: &str = "session_properties";
+pub(crate) const SCHEMA: ConnectionProperty = ConnectionProperty::optional(
+    "schema",
+    "default schema inside the catalog given as database",
+);
+pub(crate) const SESSION_PROPERTIES: ConnectionProperty = ConnectionProperty::optional(
+    "session_properties",
+    "comma-separated name=value session properties sent with every statement",
+);
 
 /// Client-side session of the Trino protocol. The server keeps no session: every
 /// request carries the catalog, schema, session properties, path, prepared statements
@@ -30,7 +36,7 @@ pub(crate) struct SessionState {
 impl SessionState {
     pub(crate) fn from_settings(settings: &ConnectionSettings) -> Result<Self, DriverError> {
         let mut properties = BTreeMap::new();
-        if let Some(list) = settings.property(SESSION_PROPERTIES_PROPERTY) {
+        if let Some(list) = settings.property(SESSION_PROPERTIES.name) {
             for entry in list
                 .split(',')
                 .map(str::trim)
@@ -51,7 +57,7 @@ impl SessionState {
                 .map(str::trim)
                 .filter(|catalog| !catalog.is_empty())
                 .map(str::to_owned),
-            schema: settings.property(SCHEMA_PROPERTY).map(str::to_owned),
+            schema: settings.property(SCHEMA.name).map(str::to_owned),
             properties,
             ..Self::default()
         })
@@ -183,17 +189,17 @@ mod tests {
         };
         settings
             .properties
-            .insert(SCHEMA_PROPERTY.into(), "tiny".into());
+            .insert(SCHEMA.name.into(), "tiny".into());
         settings
             .properties
-            .insert(SESSION_PROPERTIES_PROPERTY.into(), "a=1, b = x y".into());
+            .insert(SESSION_PROPERTIES.name.into(), "a=1, b = x y".into());
         let state = SessionState::from_settings(&settings).unwrap();
         assert_eq!(state.catalog.as_deref(), Some("tpch"));
         assert_eq!(state.schema.as_deref(), Some("tiny"));
         assert_eq!(joined(&state.properties), "a=1,b=x+y");
         settings
             .properties
-            .insert(SESSION_PROPERTIES_PROPERTY.into(), "broken".into());
+            .insert(SESSION_PROPERTIES.name.into(), "broken".into());
         assert!(SessionState::from_settings(&settings).is_err());
     }
 }

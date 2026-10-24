@@ -6,11 +6,14 @@
 use crate::errors::{map_error, map_open_error};
 use duckdb::{AccessMode, Config, Connection};
 use relix_core::ConnectionSettings;
-use relix_driver_api::DriverError;
+use relix_driver_api::{ConnectionProperty, DriverError};
 use std::path::{Path, PathBuf};
 
 const IN_MEMORY_PATH: &str = ":memory:";
-const ACCESS_MODE_PROPERTY: &str = "access_mode";
+pub(crate) const ACCESS_MODE: ConnectionProperty = ConnectionProperty::optional(
+    "access_mode",
+    "automatic (default), read_only to share the file with other processes, or read_write",
+);
 
 pub(crate) struct OpenedDatabase {
     pub(crate) session: Connection,
@@ -70,7 +73,7 @@ fn resolve_target(settings: &ConnectionSettings) -> Result<DatabaseTarget, Drive
 }
 
 fn configuration(settings: &ConnectionSettings) -> Result<Config, DriverError> {
-    let mode = match settings.property(ACCESS_MODE_PROPERTY) {
+    let mode = match settings.property(ACCESS_MODE.name) {
         None => AccessMode::Automatic,
         Some(value) => parse_access_mode(value)?,
     };
@@ -138,7 +141,7 @@ mod tests {
         let mut settings = settings(IN_MEMORY_PATH);
         settings
             .properties
-            .insert(ACCESS_MODE_PROPERTY.into(), "sometimes".into());
+            .insert(ACCESS_MODE.name.into(), "sometimes".into());
         let error = open_database(&settings).err().unwrap();
         assert_eq!(error.kind, ErrorKind::Configuration);
         assert!(matches!(

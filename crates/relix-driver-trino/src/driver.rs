@@ -4,12 +4,14 @@
  */
 
 use crate::connection::{DEFAULT_PORT, TrinoConnection};
+use crate::session_state::{SCHEMA, SESSION_PROPERTIES};
 use async_trait::async_trait;
 use relix_core::{ConnectionConfig, Dialect, DriverId};
 use relix_driver_api::{
-    ConnectionTarget, DatabaseConnection, DatabaseDriver, DriverCapabilities, DriverError,
-    DriverMetadata, with_timeout,
+    ConnectionProperty, ConnectionTarget, DatabaseConnection, DatabaseDriver, DriverCapabilities,
+    DriverError, DriverMetadata, with_timeout,
 };
+use relix_driver_http::PATH_PREFIX;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TrinoDriver;
@@ -50,6 +52,10 @@ impl DatabaseDriver for TrinoDriver {
         }
     }
 
+    fn connection_properties(&self) -> Vec<ConnectionProperty> {
+        vec![SCHEMA, SESSION_PROPERTIES, PATH_PREFIX]
+    }
+
     async fn connect(
         &self,
         config: &ConnectionConfig,
@@ -57,5 +63,20 @@ impl DatabaseDriver for TrinoDriver {
         let timeout = config.settings.connect_timeout();
         let connection = with_timeout(timeout, TrinoConnection::open(config)).await?;
         Ok(Box::new(connection))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn declares_the_properties_it_reads() {
+        let names: Vec<_> = TrinoDriver::new()
+            .connection_properties()
+            .iter()
+            .map(|property| property.name)
+            .collect();
+        assert_eq!(names, ["schema", "session_properties", "path_prefix"]);
     }
 }

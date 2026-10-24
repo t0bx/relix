@@ -4,10 +4,13 @@
  */
 
 use relix_core::{ConnectionConfig, Secret};
-use relix_driver_api::DriverError;
+use relix_driver_api::{ConnectionProperty, DriverError};
 use relix_driver_http::RequestBuilder;
 
-const AUTH_METHOD_PROPERTY: &str = "auth_method";
+pub(crate) const AUTH_METHOD: ConnectionProperty = ConnectionProperty::optional(
+    "auth_method",
+    "headers (default, X-ClickHouse-User/Key) or basic (HTTP Basic, for proxies)",
+);
 const USER_HEADER: &str = "X-ClickHouse-User";
 const KEY_HEADER: &str = "X-ClickHouse-Key";
 
@@ -36,7 +39,7 @@ impl Credentials {
             .filter(|user| !user.is_empty())
             .map(str::to_owned);
         let password = config.password.clone();
-        match config.settings.property(AUTH_METHOD_PROPERTY) {
+        match config.settings.property(AUTH_METHOD.name) {
             None | Some("headers") => Ok(Self::Headers {
                 user,
                 key: password,
@@ -84,7 +87,7 @@ mod tests {
         if let Some(method) = method {
             settings
                 .properties
-                .insert(AUTH_METHOD_PROPERTY.into(), method.into());
+                .insert(AUTH_METHOD.name.into(), method.into());
         }
         ConnectionConfig::new(settings, Some(Secret::new("pw")))
     }

@@ -5,12 +5,12 @@
 
 use crate::blocking::run_blocking;
 use crate::connection::DuckDbConnection;
-use crate::open::open_database;
+use crate::open::{ACCESS_MODE, open_database};
 use async_trait::async_trait;
 use relix_core::{ConnectionConfig, Dialect, DriverId};
 use relix_driver_api::{
-    ConnectionTarget, DatabaseConnection, DatabaseDriver, DriverCapabilities, DriverError,
-    DriverMetadata, with_timeout,
+    ConnectionProperty, ConnectionTarget, DatabaseConnection, DatabaseDriver, DriverCapabilities,
+    DriverError, DriverMetadata, with_timeout,
 };
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -47,6 +47,10 @@ impl DatabaseDriver for DuckDbDriver {
         }
     }
 
+    fn connection_properties(&self) -> Vec<ConnectionProperty> {
+        vec![ACCESS_MODE]
+    }
+
     async fn connect(
         &self,
         config: &ConnectionConfig,
@@ -55,5 +59,20 @@ impl DatabaseDriver for DuckDbDriver {
         let timeout = settings.connect_timeout();
         let opened = with_timeout(timeout, run_blocking(move || open_database(&settings))).await?;
         Ok(Box::new(DuckDbConnection::new(opened)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn declares_the_properties_it_reads() {
+        let names: Vec<_> = DuckDbDriver::new()
+            .connection_properties()
+            .iter()
+            .map(|property| property.name)
+            .collect();
+        assert_eq!(names, ["access_mode"]);
     }
 }
