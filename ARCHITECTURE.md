@@ -14,12 +14,25 @@ asynchronous services.
 | `relix-config` | Platform paths, global settings with validation/migration/recovery, key chord parsing, colours and themes, atomic owner-only file writes |
 | `relix-project` | Projects, data source associations, reusable SSH/VPN server configurations (global and project scope), sessions (layout, tabs, drafts), scripts, query/filter history persistence, credential storage (OS keyring with in-memory fallback), project export/import |
 | `relix-driver-api` | Driver interfaces (`DatabaseDriver`, `DatabaseConnection`, `SqlIntrospector`, `QueryExecutor`, `TableDataAccess`, `KeyValueConnection`), capabilities, typed errors, timeouts, dialect-aware SQL builder, external connector IPC protocol |
-| `relix-driver-postgres` | PostgreSQL adapter (`tokio-postgres`, rustls) |
-| `relix-driver-mysql` | MySQL and MariaDB adapters sharing one implementation (`mysql_async`, rustls) |
+| `relix-driver-postgres` | PostgreSQL, CockroachDB, YugabyteDB and TimescaleDB flavors (`tokio-postgres`, rustls) |
+| `relix-driver-mysql` | MySQL, MariaDB and TiDB flavors sharing one implementation (`mysql_async`, rustls) |
 | `relix-driver-sqlite` | SQLite adapter (`rusqlite`, bundled SQLite) |
-| `relix-driver-redis` | Redis adapter (`redis`, rustls) implementing the key-value interface |
+| `relix-driver-redis` | Redis and Valkey (`redis`, rustls) implementing the key-value interface |
 | `relix-driver-manager` | Driver registry, package registries, signed downloads, atomic installation, external connector runtime |
+| `relix-driver-mssql` | Microsoft SQL Server (tiberius, TDS) |
+| `relix-driver-oracle` | Oracle Database (ODPI-C via the `oracle` crate, Instant Client at runtime) |
+| `relix-driver-duckdb` | DuckDB (bundled engine, file target) |
+| `relix-driver-clickhouse` | ClickHouse over its HTTP interface |
+| `relix-driver-trino` | Trino client REST protocol |
+| `relix-driver-snowflake` | Snowflake SQL API v2 with key-pair JWT / OAuth |
+| `relix-driver-bigquery` | BigQuery REST API v2 with Google credential chain |
+| `relix-driver-mongodb` | MongoDB document store (official driver) with command console |
+| `relix-driver-dynamodb` | DynamoDB (AWS SDK) document store with PartiQL console |
 | `relix-driver-search` | Elasticsearch and OpenSearch (one implementation, product detection) over the shared HTTP transport |
+| `relix-driver-cassandra` | Apache Cassandra and ScyllaDB (scylla driver, CQL) |
+| `relix-driver-neo4j` | Neo4j over Bolt (Cypher, labels, relationship types) |
+| `relix-driver-influxdb` | InfluxDB 3 HTTP API v3 (SQL / InfluxQL) |
+| `relix-tls-relay` | Loopback TLS relay for client libraries without a pluggable rustls stack (CQL, Bolt) |
 | `relix-driver-http` | Shared HTTP transport for REST and SQL-over-HTTP engines: TLS modes, tunnel host pinning, authentication, error mapping |
 | `relix-tls` | Shared rustls client configuration (`prefer`/`require`/`verify-full`, custom CA) |
 | `relix-ssh` | SSH sessions (russh), authentication, known-hosts verification, jump-host chains, local forwarding, shared reference-counted sessions with keepalive and reconnection |
@@ -222,4 +235,4 @@ Missing drivers are resolved through the `DriverManager`:
 External connectors run as separate processes and speak a versioned JSON-lines protocol
 over stdin/stdout. The full specification, package and index formats, signing procedure
 and trust model are in [docs/drivers/external-connectors.md](docs/drivers/external-connectors.md).
-The five MVP engines are compiled in; they are not, and cannot be, dynamically loaded.
+All 25 engines are compiled in; they are not, and cannot be, dynamically loaded.

@@ -86,12 +86,35 @@ impl DatabaseDriver for ExampleDriver {
 
 Capabilities drive the UI: `schemas = false` skips the schema level in the explorer,
 `table_editing = false` keeps grids read-only, `data_model = KeyValue` (see
-`DriverCapabilities::key_value()`) switches to the key browser and console.
+`DriverCapabilities::key_value()`) switches to the key browser and console, `Document` /
+`Search` (see `DriverCapabilities::of_model`) to the document browser, and
+`query_execution = false` hides the console. `DatabaseCapability` and
+`DriverCapabilities::supports` give a uniform view of the features.
+
+Pick the connection target carefully: `Network` engines can be reached through SSH tunnels,
+`Cloud` engines (several provider endpoints) cannot, `File` engines have no network settings.
+
+Two optional methods help users:
+
+* `connection_properties()` lists engine-specific settings (`ConnectionProperty::optional` /
+  `required`) that the data source dialog hints and validates; read them with
+  `config.settings.property("name")`.
+* `dependency_status()` reports a missing native component (e.g. a client library) so the
+  driver list shows it and Relix refuses to connect with your hint.
+
+When the endpoint was redirected through an SSH tunnel, `config.tls_server_name` holds the
+original host: connect to `config.host_or_default()` but verify TLS against
+`config.tls_host()`. If your client library cannot, refuse `verify-full` with
+`ErrorKind::Tls` instead of weakening verification (or use `relix-tls-relay`). HTTP engines
+get all of this from `relix-driver-http`.
 
 ## 3. Implement the connection
 
-* `DatabaseConnection::as_sql()` returns `Some(self)` for relational engines,
-  `as_key_value()` for key-value stores.
+* `DatabaseConnection::as_sql()` returns `Some(self)` for engines browsed through the catalog
+  interfaces (relational, wide-column, graph, time-series), `as_key_value()` for key-value
+  stores, `as_document()` for document and search stores (`DocumentConnection`).
+  `as_query()` defaults to the SQL executor; non-SQL engines return their own
+  `QueryExecutor` that runs one statement of their native language.
 * `SqlIntrospector` returns databases, schemas, objects (tables, views, routines,
   sequences, triggers) and `TableDetails` (columns, primary key, indexes, foreign keys and
   a DDL/definition string). It is called lazily per explorer level.
