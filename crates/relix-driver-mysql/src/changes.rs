@@ -9,7 +9,7 @@ use crate::values::{statement_params, to_mysql};
 use mysql_async::prelude::Queryable;
 use mysql_async::{Conn, Transaction, TxOpts};
 use relix_core::{ChangeReport, ChangeSet, RowChange};
-use relix_driver_api::{BuiltStatement, DriverError, ErrorKind};
+use relix_driver_api::{BuiltStatement, DriverError, ensure_single_row};
 
 /// Applies every change of the set inside one transaction. Updates and deletes must match
 /// exactly one row (the connection reports matched rows), otherwise everything is rolled back.
@@ -74,31 +74,4 @@ async fn execute_change(
     let affected = result.affected_rows();
     result.drop_result().await.map_err(map_error)?;
     Ok(affected)
-}
-
-fn ensure_single_row(index: usize, operation: &str, affected: u64) -> Result<(), DriverError> {
-    if affected == 1 {
-        return Ok(());
-    }
-    Err(DriverError::new(
-        ErrorKind::ConcurrentModification,
-        format!(
-            "change #{} ({operation}) matched {affected} rows instead of exactly one; \
-             all changes were rolled back",
-            index + 1
-        ),
-    ))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn single_row_check_reports_failing_change() {
-        assert!(ensure_single_row(0, "update", 1).is_ok());
-        let error = ensure_single_row(2, "delete", 0).unwrap_err();
-        assert_eq!(error.kind, ErrorKind::ConcurrentModification);
-        assert!(error.message.contains("change #3 (delete) matched 0 rows"));
-    }
 }

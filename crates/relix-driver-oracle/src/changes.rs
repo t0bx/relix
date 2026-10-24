@@ -9,7 +9,7 @@ use crate::errors::map_error;
 use crate::params::{as_params, bind_values};
 use oracle::Connection;
 use relix_core::{ChangeReport, Dialect, RowChange, TableRef};
-use relix_driver_api::{BuiltStatement, DriverError, ErrorKind};
+use relix_driver_api::{BuiltStatement, DriverError, ensure_single_row};
 
 const FIRST_COLUMN_SQL: &str = "SELECT column_name FROM all_tab_columns \
      WHERE owner = :1 AND table_name = :2 ORDER BY column_id FETCH FIRST 1 ROWS ONLY";
@@ -98,31 +98,4 @@ fn run_changes(
         }
     }
     Ok(report)
-}
-
-fn ensure_single_row(index: usize, operation: &str, affected: u64) -> Result<(), DriverError> {
-    if affected == 1 {
-        return Ok(());
-    }
-    Err(DriverError::new(
-        ErrorKind::ConcurrentModification,
-        format!(
-            "change #{} ({operation}) matched {affected} rows instead of exactly one; \
-             all changes were rolled back",
-            index + 1
-        ),
-    ))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn single_row_check_reports_failing_change() {
-        assert!(ensure_single_row(0, "delete", 1).is_ok());
-        let error = ensure_single_row(0, "update", 0).unwrap_err();
-        assert_eq!(error.kind, ErrorKind::ConcurrentModification);
-        assert!(error.message.contains("change #1 (update) matched 0 rows"));
-    }
 }

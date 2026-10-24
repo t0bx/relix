@@ -11,7 +11,7 @@ use crate::params::{as_sql_params, params_of};
 use crate::result_sets::read_batch_results;
 use crate::row_count::with_row_count;
 use relix_core::{ChangeReport, ChangeSet, RowChange};
-use relix_driver_api::{BuiltStatement, DriverError, ErrorKind};
+use relix_driver_api::{BuiltStatement, DriverError, ensure_single_row};
 
 const BEGIN_SQL: &str = "BEGIN TRANSACTION";
 const COMMIT_SQL: &str = "COMMIT TRANSACTION";
@@ -87,32 +87,5 @@ async fn roll_back(client: &mut MsSqlClient, error: DriverError) -> DriverError 
             "rolling back failed ({}) after: {}",
             rollback.message, error.message
         )),
-    }
-}
-
-fn ensure_single_row(index: usize, operation: &str, affected: u64) -> Result<(), DriverError> {
-    if affected == 1 {
-        return Ok(());
-    }
-    Err(DriverError::new(
-        ErrorKind::ConcurrentModification,
-        format!(
-            "change #{} ({operation}) matched {affected} rows instead of exactly one; \
-             all changes were rolled back",
-            index + 1
-        ),
-    ))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn single_row_check_reports_failing_change() {
-        assert!(ensure_single_row(0, "update", 1).is_ok());
-        let error = ensure_single_row(1, "delete", 2).unwrap_err();
-        assert_eq!(error.kind, ErrorKind::ConcurrentModification);
-        assert!(error.message.contains("change #2 (delete) matched 2 rows"));
     }
 }

@@ -4,6 +4,7 @@
  */
 
 pub mod capabilities;
+mod change_checks;
 pub mod connection;
 pub mod document;
 pub mod document_rows;
@@ -18,6 +19,7 @@ pub mod timeout;
 
 pub use async_trait::async_trait;
 pub use capabilities::{DatabaseCapability, DriverCapabilities};
+pub use change_checks::ensure_single_row;
 pub use connection::{DatabaseConnection, ServerInfo};
 pub use document::DocumentConnection;
 pub use document_rows::{document_fields, document_rows, json_cell};
