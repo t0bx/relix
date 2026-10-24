@@ -107,6 +107,15 @@ fn build_driver_manager(
     manager.register_built_in(Arc::new(relix_driver_mysql::MariaDbDriver));
     manager.register_built_in(Arc::new(relix_driver_sqlite::SqliteDriver));
     manager.register_built_in(Arc::new(relix_driver_redis::RedisDriver));
+    manager.register_built_in(Arc::new(relix_driver_postgres::CockroachDbDriver));
+    manager.register_built_in(Arc::new(relix_driver_postgres::YugabyteDbDriver));
+    manager.register_built_in(Arc::new(relix_driver_postgres::TimescaleDbDriver));
+    manager.register_built_in(Arc::new(relix_driver_mysql::TiDbDriver));
+    manager.register_built_in(Arc::new(relix_driver_redis::ValkeyDriver));
+    manager.register_built_in(Arc::new(relix_driver_mssql::MsSqlDriver::new()));
+    manager.register_built_in(Arc::new(relix_driver_oracle::OracleDriver::new()));
+    manager.register_built_in(Arc::new(relix_driver_snowflake::SnowflakeDriver::new()));
+    manager.register_built_in(Arc::new(relix_driver_bigquery::BigQueryDriver::new()));
     manager.register_built_in(Arc::new(relix_driver_mongodb::MongoDbDriver));
     manager.register_built_in(Arc::new(relix_driver_dynamodb::DynamoDbDriver));
     manager.register_built_in(Arc::new(relix_driver_search::ElasticsearchDriver));

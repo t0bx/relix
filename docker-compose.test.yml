@@ -101,3 +101,83 @@ services:
     ports:
       - "58000:8000"
     mem_limit: 512m
+  cockroachdb:
+    image: cockroachdb/cockroach:latest
+    command: ["start-single-node", "--insecure", "--cache=64MiB", "--max-sql-memory=128MiB"]
+    ports:
+      - "56257:26257"
+    healthcheck:
+      test: ["CMD", "/cockroach/cockroach", "sql", "--insecure", "-e", "SELECT 1"]
+      interval: 2s
+      retries: 60
+  yugabytedb:
+    image: yugabytedb/yugabyte:latest
+    command: ["bin/yugabyted", "start", "--background=false", "--tserver_flags=ysql_enable_auth=true"]
+    ports:
+      - "55433:5433"
+    healthcheck:
+      test: ["CMD-SHELL", "PGPASSWORD=yugabyte bin/ysqlsh -h $$(hostname) -U yugabyte -c 'SELECT 1'"]
+      interval: 5s
+      retries: 60
+  timescaledb:
+    image: timescale/timescaledb:latest-pg17
+    environment:
+      POSTGRES_USER: relix
+      POSTGRES_PASSWORD: relix_test
+      POSTGRES_DB: relix_test
+      TS_TUNE_MEMORY: 256MB
+    ports:
+      - "55434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U relix -d relix_test"]
+      interval: 2s
+      retries: 30
+  tidb:
+    image: pingcap/tidb:v8.5.3
+    command: ["--config=/etc/tidb.toml"]
+    configs:
+      - source: tidb_config
+        target: /etc/tidb.toml
+    ports:
+      - "54000:4000"
+  valkey:
+    image: valkey/valkey:8
+    command: ["valkey-server", "--requirepass", "relix_test"]
+    ports:
+      - "56380:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "-a", "relix_test", "ping"]
+      interval: 2s
+      retries: 30
+  mssql:
+    image: mcr.microsoft.com/azure-sql-edge:latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Relix_test1!"
+    ports:
+      - "51433:1433"
+    mem_limit: 1536m
+  oracle:
+    image: gvenzl/oracle-free:slim
+    environment:
+      ORACLE_PASSWORD: relix_root
+      APP_USER: relix
+      APP_USER_PASSWORD: relix_test
+    ports:
+      - "51521:1521"
+    mem_limit: 1536m
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      retries: 60
+  bigquery:
+    image: ghcr.io/goccy/bigquery-emulator:latest
+    platform: linux/amd64
+    command: ["--project=relix-test"]
+    ports:
+      - "59050:9050"
+configs:
+  tidb_config:
+    content: |
+      [security]
+      auto-tls = true

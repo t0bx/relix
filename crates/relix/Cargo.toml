@@ -23,12 +23,16 @@ relix-connections = { path = "../relix-connections" }
 relix-core.workspace = true
 relix-driver-api.workspace = true
 relix-driver-manager = { path = "../relix-driver-manager" }
+relix-driver-bigquery = { path = "../relix-driver-bigquery" }
 relix-driver-dynamodb = { path = "../relix-driver-dynamodb" }
 relix-driver-mongodb = { path = "../relix-driver-mongodb" }
+relix-driver-mssql = { path = "../relix-driver-mssql" }
 relix-driver-mysql = { path = "../relix-driver-mysql" }
+relix-driver-oracle = { path = "../relix-driver-oracle" }
 relix-driver-postgres = { path = "../relix-driver-postgres" }
 relix-driver-redis = { path = "../relix-driver-redis" }
 relix-driver-search = { path = "../relix-driver-search" }
+relix-driver-snowflake = { path = "../relix-driver-snowflake" }
 relix-driver-sqlite = { path = "../relix-driver-sqlite" }
 relix-project.workspace = true
 relix-tui = { path = "../relix-tui" }
