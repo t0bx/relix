@@ -36,7 +36,10 @@ pub fn config() -> Option<ConnectionConfig> {
         },
         ..ConnectionSettings::default()
     };
-    Some(ConnectionConfig::new(settings, read("TOKEN").map(Secret::new)))
+    Some(ConnectionConfig::new(
+        settings,
+        read("TOKEN").map(Secret::new),
+    ))
 }
 
 pub fn has_token() -> bool {
@@ -60,21 +63,7 @@ pub fn sql(connection: &dyn DatabaseConnection) -> &dyn SqlConnection {
 /// nanosecond precision. The driver itself does not write points.
 pub async fn database_with(config: &ConnectionConfig, lines: &str) -> String {
     let database = unique_name("relix_db");
-    let auth = config
-        .password
-        .clone()
-        .map_or(HttpAuth::None, HttpAuth::Bearer);
-    let endpoint = HttpEndpoint::connect(
-        config,
-        EndpointOptions {
-            default_port: 8181,
-            probe_path: "/ping".into(),
-            auth,
-            request_timeout: None,
-        },
-    )
-    .await
-    .unwrap();
+    let endpoint = admin_endpoint(config).await;
     endpoint
         .send(
             endpoint
@@ -95,6 +84,36 @@ pub async fn database_with(config: &ConnectionConfig, lines: &str) -> String {
         .await
         .unwrap();
     database
+}
+
+/// Drops a test database again; InfluxDB 3 Core allows only five databases.
+pub async fn drop_database(config: &ConnectionConfig, database: &str) {
+    let endpoint = admin_endpoint(config).await;
+    endpoint
+        .send(endpoint.request(
+            Method::DELETE,
+            &format!("/api/v3/configure/database?db={database}"),
+        ))
+        .await
+        .unwrap();
+}
+
+async fn admin_endpoint(config: &ConnectionConfig) -> HttpEndpoint {
+    let auth = config
+        .password
+        .clone()
+        .map_or(HttpAuth::None, HttpAuth::Bearer);
+    HttpEndpoint::connect(
+        config,
+        EndpointOptions {
+            default_port: 8181,
+            probe_path: "/ping".into(),
+            auth,
+            request_timeout: None,
+        },
+    )
+    .await
+    .unwrap()
 }
 
 pub fn scoped(config: &ConnectionConfig, database: &str) -> ConnectionConfig {

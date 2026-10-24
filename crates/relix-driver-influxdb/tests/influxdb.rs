@@ -76,7 +76,11 @@ async fn sql_and_influxql_queries_stream_up_to_the_row_limit() {
         relix_core::StatementOutcome::Rows(batch) => batch,
         other => panic!("{other:?}"),
     };
-    let names: Vec<&str> = limited.columns.iter().map(|column| column.name.as_str()).collect();
+    let names: Vec<&str> = limited
+        .columns
+        .iter()
+        .map(|column| column.name.as_str())
+        .collect();
     assert_eq!(names, ["time", "host", "usage"]);
     assert_eq!(limited.rows.len(), 10);
     assert!(limited.has_more);
@@ -108,11 +112,19 @@ async fn sql_and_influxql_queries_stream_up_to_the_row_limit() {
     let measurements = common::rows(influx.as_ref(), "SHOW MEASUREMENTS").await;
     let name = measurements.column_index("name").unwrap();
     let listed: Vec<&Value> = measurements.rows.iter().map(|row| &row[name]).collect();
-    assert_eq!(listed, [&Value::Text("cpu".into()), &Value::Text("mem".into())]);
-    let selected = common::rows(influx.as_ref(), "SELECT usage FROM cpu WHERE host = 'host1'").await;
+    assert_eq!(
+        listed,
+        [&Value::Text("cpu".into()), &Value::Text("mem".into())]
+    );
+    let selected = common::rows(
+        influx.as_ref(),
+        "SELECT usage FROM cpu WHERE host = 'host1'",
+    )
+    .await;
     assert_eq!(selected.rows.len(), 12);
     influx.close().await.unwrap();
     connection.close().await.unwrap();
+    common::drop_database(&config, &database).await;
 }
 
 #[tokio::test]
@@ -129,12 +141,21 @@ async fn browses_databases_schemas_measurements_and_columns() {
     let schemas = sql.schemas(&database).await.unwrap();
     assert_eq!(&schemas[..3], ["iox", "system", "information_schema"]);
     let measurements = sql.objects(&database, Some("iox")).await.unwrap();
-    let names: Vec<&str> = measurements.iter().map(|object| object.object.name.as_str()).collect();
-    assert!(names.contains(&"cpu") && names.contains(&"mem"), "{names:?}");
+    let names: Vec<&str> = measurements
+        .iter()
+        .map(|object| object.object.name.as_str())
+        .collect();
+    assert!(
+        names.contains(&"cpu") && names.contains(&"mem"),
+        "{names:?}"
+    );
     assert_eq!(measurements[0].comment.as_deref(), Some("measurement"));
     let system = sql.objects(&database, Some("system")).await.unwrap();
     assert!(system.iter().any(|object| object.object.name == "queries"));
-    let views = sql.objects(&database, Some("information_schema")).await.unwrap();
+    let views = sql
+        .objects(&database, Some("information_schema"))
+        .await
+        .unwrap();
     assert!(views.iter().all(|object| object.kind == ObjectKind::View));
 
     let cpu = TableRef::new(Some(database.clone()), Some("iox".into()), "cpu");
@@ -158,6 +179,7 @@ async fn browses_databases_schemas_measurements_and_columns() {
     let missing = TableRef::new(Some(database.clone()), Some("iox".into()), "nope");
     assert!(sql.table_details(&missing).await.is_err());
     connection.close().await.unwrap();
+    common::drop_database(&config, &database).await;
 }
 
 #[tokio::test]
@@ -182,8 +204,14 @@ async fn table_pages_are_newest_first_filtered_and_read_only() {
     assert_eq!(first.rows.len(), 10);
     assert!(first.has_more);
     let time = first.column_index("time").unwrap();
-    assert_eq!(first.rows[0][time], Value::Text("2023-11-14T22:13:44Z".into()));
-    assert_eq!(first.columns[time].type_name.as_deref(), Some("Timestamp(ns)"));
+    assert_eq!(
+        first.rows[0][time],
+        Value::Text("2023-11-14T22:13:44Z".into())
+    );
+    assert_eq!(
+        first.columns[time].type_name.as_deref(),
+        Some("Timestamp(ns)")
+    );
     let last = sql
         .fetch_table_page(
             &cpu,
@@ -217,7 +245,11 @@ async fn table_pages_are_newest_first_filtered_and_read_only() {
         .unwrap();
     assert_eq!(recent, 0);
     let queries = TableRef::new(Some(database.clone()), Some("system".into()), "queries");
-    assert!(sql.fetch_table_page(&queries, &TableQuery::default()).await.is_ok());
+    assert!(
+        sql.fetch_table_page(&queries, &TableQuery::default())
+            .await
+            .is_ok()
+    );
     let error = sql
         .apply_changes(&ChangeSet {
             table: cpu,
@@ -227,6 +259,7 @@ async fn table_pages_are_newest_first_filtered_and_read_only() {
         .unwrap_err();
     assert_eq!(error.kind, ErrorKind::Unsupported);
     connection.close().await.unwrap();
+    common::drop_database(&config, &database).await;
 }
 
 #[tokio::test]
