@@ -51,9 +51,16 @@ pub fn map_status_error(status: u16, body: &str) -> DriverError {
 
 pub fn is_tls_message(message: &str) -> bool {
     let lower = message.to_lowercase();
-    ["certificate", "tls", "ssl", "handshake", "invalid peer"]
-        .iter()
-        .any(|needle| lower.contains(needle))
+    [
+        "certificate",
+        "tls",
+        "ssl",
+        "handshake",
+        "invalid peer",
+        "corrupt message",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
 }
 
 fn error_chain(error: &reqwest::Error) -> String {
@@ -98,6 +105,14 @@ mod tests {
         assert_eq!(map_status_error(401, "").kind, ErrorKind::Authentication);
         assert_eq!(map_status_error(400, "syntax").kind, ErrorKind::Query);
         assert_eq!(map_status_error(503, "").kind, ErrorKind::Internal);
+    }
+
+    #[test]
+    fn plain_text_answers_to_a_tls_handshake_are_tls_errors() {
+        assert!(is_tls_message(
+            "client error (Connect): received corrupt message of type InvalidContentType"
+        ));
+        assert!(!is_tls_message("connection refused"));
     }
 
     #[test]
