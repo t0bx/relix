@@ -3,4 +3,7 @@
 # rsa crate through russh to sign SSH authentication challenges with the user's own key,
 # locally and once per login; the attack needs many precisely timed private-key
 # operations observed by the attacker. Remove this entry once a fixed rsa is released.
-ignore = ["RUSTSEC-2023-0071"]
+#
+# RUSTSEC-2024-0436 (paste, unmaintained): a compile-time proc-macro used by the oracle
+# crate; it generates code at build time and has no runtime exposure.
+ignore = ["RUSTSEC-2023-0071", "RUSTSEC-2024-0436"]
