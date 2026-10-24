@@ -6,7 +6,7 @@ default-members = ["crates/relix"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.89"
+rust-version = "1.94.1"
 license = "MIT"
 authors = ["t0bx"]
 repository = "https://github.com/t0bx/relix"

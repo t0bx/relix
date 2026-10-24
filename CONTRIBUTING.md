@@ -5,7 +5,7 @@ checks every change has to pass and the conventions used in the code base.
 
 ## Development environment
 
-* Rust **1.89 or newer** (the repository pins the stable toolchain via
+* Rust **1.94.1 or newer** (the repository pins the stable toolchain via
   `rust-toolchain.toml`; `rustup` installs it automatically together with `rustfmt` and
   `clippy`).
 * A C compiler (SQLite and libdbus are built from bundled sources).

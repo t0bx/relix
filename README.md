@@ -138,7 +138,7 @@ tar -xzf relix-v0.1.0-linux-x86_64.tar.gz
 install relix-v0.1.0-linux-x86_64/relix ~/.local/bin/
 ```
 
-Or build from source (Rust 1.89 or newer):
+Or build from source (Rust 1.94.1 or newer; a C/C++ compiler is needed for the bundled DuckDB, SQLite and ODPI-C):
 
 ```bash
 cargo install --locked --path crates/relix
