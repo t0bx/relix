@@ -117,12 +117,10 @@ pub async fn create_keyspace(connection: &dyn DatabaseConnection) -> String {
     );
     let options = ExecuteOptions::default();
     let with_vnodes = format!("{base} AND tablets = {{'enabled': false}}");
-    if sql(connection)
-        .execute(&with_vnodes, &options)
-        .await
-        .is_err()
-    {
-        run(connection, &base).await;
+    if let Err(vnodes_error) = sql(connection).execute(&with_vnodes, &options).await {
+        if let Err(error) = sql(connection).execute(&base, &options).await {
+            panic!("{with_vnodes} failed: {vnodes_error}; fallback {base} failed: {error}");
+        }
     }
     keyspace
 }

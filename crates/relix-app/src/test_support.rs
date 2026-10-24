@@ -20,6 +20,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 const SETTLE_TIMEOUT: Duration = Duration::from_millis(400);
+const WAIT_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Drives a real [`App`] with in-memory secrets, the SQLite driver plus any extra drivers,
 /// and an isolated home directory. Used by workflow and rendering tests.
@@ -69,6 +70,27 @@ impl AppHarness {
         while let Ok(Some(event)) = tokio::time::timeout(SETTLE_TIMEOUT, self.events.recv()).await {
             self.app.handle_event(event);
         }
+    }
+
+    /// Applies background task results until `done` holds, then drains what is still queued.
+    /// Use this instead of [`Self::settle`] when a test waits for a specific outcome: slow CI
+    /// runners can stay silent longer than the settle window before the first event arrives.
+    pub async fn settle_until(&mut self, mut done: impl FnMut(&mut Self) -> bool) {
+        let deadline = tokio::time::Instant::now() + WAIT_TIMEOUT;
+        while !done(self) {
+            match tokio::time::timeout_at(deadline, self.events.recv()).await {
+                Ok(Some(event)) => {
+                    self.app.handle_event(event);
+                }
+                Ok(None) => {
+                    panic!("event channel closed before the condition was met");
+                }
+                Err(_) => {
+                    panic!("condition not met within {WAIT_TIMEOUT:?}");
+                }
+            }
+        }
+        self.settle().await;
     }
 
     pub fn key(&mut self, chord: KeyChord) {

@@ -246,7 +246,9 @@ async fn destructive_statements_need_confirmation_on_production() {
     );
     harness.keys("f5");
     harness.key(KeyChord::plain(KeyCode::Enter));
-    harness.settle().await;
+    harness
+        .settle_until(|harness| !harness.active_editor().results.is_empty())
+        .await;
     assert!(matches!(
         harness.active_editor().results[0].kind,
         ResultKind::Affected(1)

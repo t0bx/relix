@@ -177,7 +177,7 @@ services:
     ports:
       - "59050:9050"
   scylladb:
-    image: scylladb/scylla
+    image: scylladb/scylla:2025.1
     command: ["--smp", "1", "--memory", "512M", "--overprovisioned", "1", "--authenticator", "PasswordAuthenticator", "--authorizer", "CassandraAuthorizer", "--auth-superuser-name", "cassandra", "--auth-superuser-salted-password", "\\$$6\\$$acHeRyEUDXZAd02B\\$$T8R40y5wwIT8Ysr.rb7d2Zmd1fjc9ejAuW.TsAoX0/opxG84Xqs5av3.5bhxZNR2qMFM1NQYq7LCwrGq/PmjX."]
     ports:
       - "59042:9042"
