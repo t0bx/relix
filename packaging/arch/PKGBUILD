@@ -1,0 +1,25 @@
+# Maintainer: t0bx <https://github.com/t0bx>
+
+pkgname=relix
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Modern keyboard-driven database IDE for the terminal"
+arch=('x86_64')
+url="https://github.com/t0bx/relix"
+license=('MIT')
+depends=('gcc-libs' 'glibc')
+optdepends=(
+  'org.freedesktop.secrets: store passwords in the system keyring'
+  'oracle-instantclient-basic: Oracle Database support'
+)
+options=('!debug')
+source=("$url/releases/download/v$pkgver/relix-v$pkgver-linux-x86_64.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+  cd "relix-v$pkgver-linux-x86_64"
+
+  install -Dm755 relix "$pkgdir/usr/bin/relix"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

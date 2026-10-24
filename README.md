@@ -128,6 +128,26 @@ reusable named configurations, global or per project (`Space n`):
 
 ## Installation
 
+### Arch Linux (x86_64)
+
+```bash
+curl -sLO https://raw.githubusercontent.com/t0bx/relix/main/relix.asc
+sudo pacman-key --add relix.asc
+sudo pacman-key --lsign-key CC94E0FAF0D2B30D39B66F5D309032DF0CF40806
+```
+
+Add to `/etc/pacman.conf`:
+
+```ini
+[relix]
+SigLevel = Required
+Server = https://github.com/t0bx/relix/releases/download/repo
+```
+
+Then `sudo pacman -Syu relix`. Updates arrive with regular system upgrades.
+
+### Other platforms
+
 Download the archive for your platform from the
 [releases page](https://github.com/t0bx/relix/releases), verify it and put `relix` on your
 `PATH`:

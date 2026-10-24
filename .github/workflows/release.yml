@@ -138,3 +138,62 @@ jobs:
             dist/*.tar.gz
             dist/*.zip
             dist/SHA256SUMS
+
+  arch-repo:
+    name: Publish Arch repository
+    needs: [validate, publish]
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+      GPG_KEY_ID: ${{ vars.GPG_KEY_ID }}
+    steps:
+      - name: Install tools
+        run: pacman -Syu --noconfirm base-devel github-cli
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-x86_64
+          path: artifact
+
+      - name: Prepare build user
+        run: |
+          useradd -m builder
+          chown -R builder:builder .
+
+      - name: Import signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: echo "$GPG_PRIVATE_KEY" | sudo -u builder -H gpg --batch --import
+
+      - name: Build and sign package
+        run: |
+          checksum="$(cut -d ' ' -f1 "artifact/relix-v$VERSION-linux-x86_64.tar.gz.sha256")"
+          cd packaging/arch
+          sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+          sed -i "s/^sha256sums=.*/sha256sums=('$checksum')/" PKGBUILD
+          sudo -u builder -H env GPGKEY="$GPG_KEY_ID" makepkg --sign --noconfirm
+
+      - name: Create signed repository database
+        run: |
+          mkdir repo
+          cp packaging/arch/*.pkg.tar.zst packaging/arch/*.pkg.tar.zst.sig repo/
+          chown -R builder:builder repo
+          cd repo
+          sudo -u builder -H repo-add --sign --key "$GPG_KEY_ID" relix.db.tar.gz *.pkg.tar.zst
+          for f in relix.db relix.db.sig relix.files relix.files.sig; do
+            cp --remove-destination "$(readlink "$f")" "$f"
+          done
+
+      - name: Publish repository release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete repo --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create repo repo/* --repo "$GITHUB_REPOSITORY" --title "Arch Linux repository" --notes "Signed pacman repository for RELIX. Setup: see README." --latest=false
