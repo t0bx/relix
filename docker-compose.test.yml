@@ -62,7 +62,7 @@ services:
     ports:
       - "59200:9200"
     healthcheck:
-      test: ["CMD-SHELL", "curl -s -u elastic:relix_test localhost:9200/_cluster/health | grep -q status"]
+      test: ["CMD-SHELL", "curl -sf -u elastic:relix_test 'localhost:9200/_cluster/health?wait_for_status=yellow&timeout=1s'"]
       interval: 3s
       retries: 60
   opensearch:
@@ -77,7 +77,7 @@ services:
     ports:
       - "59201:9200"
     healthcheck:
-      test: ["CMD-SHELL", "curl -s localhost:9200/_cluster/health | grep -q status"]
+      test: ["CMD-SHELL", "curl -sf 'localhost:9200/_cluster/health?wait_for_status=yellow&timeout=1s'"]
       interval: 3s
       retries: 60
   mongodb:
