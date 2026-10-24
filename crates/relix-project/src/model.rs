@@ -173,6 +173,37 @@ mod tests {
     }
 
     #[test]
+    fn project_files_from_the_first_release_still_load() {
+        let legacy = r#"
+format_version = 1
+id = "1c0f6a64-6f43-4a39-9b55-4dcf1f7d9c11"
+name = "Development"
+created_at = "2026-10-23T08:00:00Z"
+
+[[data_sources]]
+id = "7a4e9a2b-3c1d-4f5e-8a6b-9c0d1e2f3a4b"
+name = "Main PG"
+driver = "postgres"
+
+[data_sources.settings]
+host = "db.internal"
+port = 5432
+save_password = true
+
+[data_sources.settings.tls]
+mode = "verify_full"
+"#;
+        let project: Project = toml::from_str(legacy).unwrap();
+        let source = &project.data_sources[0];
+        assert!(source.network.is_direct());
+        assert!(source.settings.properties.is_empty());
+        assert_eq!(source.settings.query_timeout(), None);
+        let saved = toml::to_string_pretty(&project).unwrap();
+        let reloaded: Project = toml::from_str(&saved).unwrap();
+        assert_eq!(reloaded, project);
+    }
+
+    #[test]
     fn removing_default_source_clears_default() {
         let mut project = Project::new("Dev").unwrap();
         let source = DataSourceDefinition::new("Notes", DriverId::from("sqlite"));
