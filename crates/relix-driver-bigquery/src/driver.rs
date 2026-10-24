@@ -7,8 +7,8 @@ use crate::connection::BigQueryConnection;
 use async_trait::async_trait;
 use relix_core::{ConnectionConfig, Dialect, DriverId};
 use relix_driver_api::{
-    ConnectionTarget, DatabaseConnection, DatabaseDriver, DriverCapabilities, DriverError,
-    DriverMetadata, with_timeout,
+    ConnectionProperty, ConnectionTarget, DatabaseConnection, DatabaseDriver, DriverCapabilities,
+    DriverError, DriverMetadata, with_timeout,
 };
 
 /// Google BigQuery over the REST API v2. Requests go to Google's API front ends and
@@ -45,6 +45,37 @@ impl DatabaseDriver for BigQueryDriver {
             tls: true,
             ..DriverCapabilities::relational()
         }
+    }
+
+    fn connection_properties(&self) -> Vec<ConnectionProperty> {
+        vec![
+            ConnectionProperty::optional(
+                "project_id",
+                "Google Cloud project (otherwise the database field or the credentials project)",
+            ),
+            ConnectionProperty::optional(
+                "credentials_file",
+                "service account key file (otherwise Application Default Credentials)",
+            ),
+            ConnectionProperty::optional(
+                "auth",
+                "adc (default), service_account, or none together with endpoint",
+            ),
+            ConnectionProperty::optional("location", "job location, e.g. EU"),
+            ConnectionProperty::optional("dataset", "default dataset"),
+            ConnectionProperty::optional(
+                "additional_projects",
+                "comma-separated projects to list in the explorer",
+            ),
+            ConnectionProperty::optional(
+                "maximum_bytes_billed",
+                "refuse queries that would bill more bytes",
+            ),
+            ConnectionProperty::optional(
+                "endpoint",
+                "API base URL override, e.g. a local emulator",
+            ),
+        ]
     }
 
     async fn connect(

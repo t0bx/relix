@@ -56,10 +56,7 @@ impl DatabaseDriver for InfluxDbDriver {
                 "query_language",
                 "'sql' (default) or 'influxql' for the query console",
             ),
-            ConnectionProperty::optional(
-                "path_prefix",
-                "URL path prefix when the API is served behind a reverse proxy",
-            ),
+            relix_driver_http::PATH_PREFIX,
         ]
     }
 

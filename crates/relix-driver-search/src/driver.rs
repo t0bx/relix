@@ -8,8 +8,8 @@ use crate::flavor::Flavor;
 use async_trait::async_trait;
 use relix_core::{ConnectionConfig, DataModel, Dialect};
 use relix_driver_api::{
-    ConnectionTarget, DatabaseConnection, DatabaseDriver, DriverCapabilities, DriverError,
-    DriverMetadata,
+    ConnectionProperty, ConnectionTarget, DatabaseConnection, DatabaseDriver, DriverCapabilities,
+    DriverError, DriverMetadata,
 };
 
 macro_rules! flavored_driver {
@@ -31,6 +31,24 @@ macro_rules! flavored_driver {
 
             fn capabilities(&self) -> DriverCapabilities {
                 driver_capabilities()
+            }
+
+            fn connection_properties(&self) -> Vec<ConnectionProperty> {
+                vec![
+                    ConnectionProperty::optional(
+                        "auth",
+                        "basic (default), api_key, bearer or none",
+                    ),
+                    ConnectionProperty::optional(
+                        "show_hidden",
+                        "true to list hidden, system and dot-prefixed indices",
+                    ),
+                    ConnectionProperty::optional(
+                        "track_total_hits",
+                        "true for exact totals above 10,000 hits",
+                    ),
+                    relix_driver_http::PATH_PREFIX,
+                ]
             }
 
             async fn connect(

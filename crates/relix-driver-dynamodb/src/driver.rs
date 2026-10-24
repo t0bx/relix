@@ -7,8 +7,8 @@ use crate::connect::open_connection;
 use async_trait::async_trait;
 use relix_core::{ConnectionConfig, DataModel, Dialect, DriverId};
 use relix_driver_api::{
-    ConnectionTarget, DatabaseConnection, DatabaseDriver, DriverCapabilities, DriverError,
-    DriverMetadata,
+    ConnectionProperty, ConnectionTarget, DatabaseConnection, DatabaseDriver, DriverCapabilities,
+    DriverError, DriverMetadata,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -38,6 +38,20 @@ impl DatabaseDriver for DynamoDbDriver {
             index_management: true,
             ..DriverCapabilities::of_model(DataModel::Document)
         }
+    }
+
+    fn connection_properties(&self) -> Vec<ConnectionProperty> {
+        vec![
+            ConnectionProperty::optional(
+                "region",
+                "AWS region, e.g. eu-central-1 (otherwise taken from the AWS configuration)",
+            ),
+            ConnectionProperty::optional("profile", "named profile from ~/.aws/config"),
+            ConnectionProperty::optional(
+                "endpoint_url",
+                "custom endpoint such as DynamoDB Local or a VPC endpoint",
+            ),
+        ]
     }
 
     async fn connect(

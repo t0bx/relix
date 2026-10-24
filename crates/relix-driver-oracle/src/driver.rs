@@ -8,8 +8,8 @@ use crate::connection::OracleConnection;
 use async_trait::async_trait;
 use relix_core::{ConnectionConfig, Dialect, DriverId};
 use relix_driver_api::{
-    ConnectionTarget, DatabaseConnection, DatabaseDriver, DriverCapabilities, DriverError,
-    DriverMetadata, with_timeout,
+    ConnectionProperty, ConnectionTarget, DatabaseConnection, DatabaseDriver, DriverCapabilities,
+    DriverError, DriverMetadata, with_timeout,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -45,6 +45,13 @@ impl DatabaseDriver for OracleDriver {
             tls: false,
             ..DriverCapabilities::relational()
         }
+    }
+
+    fn connection_properties(&self) -> Vec<ConnectionProperty> {
+        vec![ConnectionProperty::optional(
+            "client_lib_dir",
+            "directory of the Oracle Instant Client (needed on macOS)",
+        )]
     }
 
     async fn connect(

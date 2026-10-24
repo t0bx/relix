@@ -7,8 +7,8 @@ use crate::connect::open_connection;
 use async_trait::async_trait;
 use relix_core::{ConnectionConfig, DataModel, Dialect, DriverId};
 use relix_driver_api::{
-    ConnectionTarget, DatabaseConnection, DatabaseDriver, DriverCapabilities, DriverError,
-    DriverMetadata,
+    ConnectionProperty, ConnectionTarget, DatabaseConnection, DatabaseDriver, DriverCapabilities,
+    DriverError, DriverMetadata,
 };
 
 pub const DEFAULT_PORT: u16 = 27017;
@@ -43,6 +43,28 @@ impl DatabaseDriver for MongoDbDriver {
             index_management: true,
             ..DriverCapabilities::of_model(DataModel::Document)
         }
+    }
+
+    fn connection_properties(&self) -> Vec<ConnectionProperty> {
+        vec![
+            ConnectionProperty::optional(
+                "uri",
+                "full connection string (mongodb:// or mongodb+srv://); replaces host and port",
+            ),
+            ConnectionProperty::optional(
+                "authSource",
+                "database that holds the user; default admin",
+            ),
+            ConnectionProperty::optional(
+                "authMechanism",
+                "SCRAM-SHA-256, SCRAM-SHA-1, PLAIN, MONGODB-X509 or MONGODB-OIDC",
+            ),
+            ConnectionProperty::optional("replicaSet", "replica set name"),
+            ConnectionProperty::optional(
+                "directConnection",
+                "true to talk to the given node only (default through SSH tunnels)",
+            ),
+        ]
     }
 
     async fn connect(

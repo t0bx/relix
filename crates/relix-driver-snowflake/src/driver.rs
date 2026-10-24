@@ -8,8 +8,8 @@ use crate::settings::DEFAULT_PORT;
 use async_trait::async_trait;
 use relix_core::{ConnectionConfig, Dialect, DriverId};
 use relix_driver_api::{
-    ConnectionTarget, DatabaseConnection, DatabaseDriver, DriverCapabilities, DriverError,
-    DriverMetadata, with_timeout,
+    ConnectionProperty, ConnectionTarget, DatabaseConnection, DatabaseDriver, DriverCapabilities,
+    DriverError, DriverMetadata, with_timeout,
 };
 
 /// Snowflake over the SQL API v2. All requests go to the single account host
@@ -49,6 +49,26 @@ impl DatabaseDriver for SnowflakeDriver {
             tls: true,
             ..DriverCapabilities::relational()
         }
+    }
+
+    fn connection_properties(&self) -> Vec<ConnectionProperty> {
+        vec![
+            ConnectionProperty::optional(
+                "account",
+                "account identifier, e.g. myorg-myaccount (otherwise taken from the host)",
+            ),
+            ConnectionProperty::optional(
+                "authenticator",
+                "snowflake_jwt (default, key pair), oauth or programmatic_access_token",
+            ),
+            ConnectionProperty::optional(
+                "private_key_file",
+                "PKCS#8 private key for key-pair authentication; passphrase in the password field",
+            ),
+            ConnectionProperty::optional("warehouse", "virtual warehouse"),
+            ConnectionProperty::optional("role", "role to use"),
+            ConnectionProperty::optional("schema", "default schema"),
+        ]
     }
 
     async fn connect(
