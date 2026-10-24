@@ -29,8 +29,11 @@ the terminal.
   saved scripts, query history and persisted session (pane layout, tabs, unsaved drafts,
   connected sources, expanded explorer nodes). Switching projects never loses unsaved
   editor content.
-- **Five native engines** — PostgreSQL, MySQL, MariaDB, SQLite and Redis are compiled in
-  and work out of the box (TLS with `disable` / `prefer` / `require` / `verify-full`).
+- **25 native engines** — relational, analytics, key-value, document, search, wide-column,
+  graph and time-series databases are compiled in and work out of the box (TLS with
+  `disable` / `prefer` / `require` / `verify-full`).
+- **SSH tunnels and VPN** — reusable, named SSH and VPN configurations (global or per
+  project), jump hosts, shared sessions, explicit host key trust, VPN + SSH combinations.
 - **Database explorer** — lazily loaded tree of databases, schemas, tables, views,
   routines, sequences, columns, indexes and foreign keys, with filtering, refresh and
   DDL/definition inspection.
@@ -91,14 +94,37 @@ checksums (`SHA256SUMS`).
 
 ## Supported databases
 
-| Engine | Driver | Notes |
-|---|---|---|
-| PostgreSQL | built-in (`tokio-postgres`) | cross-database browsing, cancellation, PostgreSQL 12+ |
-| MySQL | built-in (`mysql_async`) | cancellation via `KILL QUERY` |
-| MariaDB | built-in (`mysql_async`) | separate data source type, sequences, flavor detection |
-| SQLite | built-in (`rusqlite`, bundled) | attached databases, `:memory:`, file creation |
-| Redis | built-in (`redis`) | numbered databases, ACL users, TLS |
-| others | external connectors | see [docs/drivers/external-connectors.md](docs/drivers/external-connectors.md) |
+25 engines are compiled in:
+
+| Family | Engines |
+|---|---|
+| PostgreSQL protocol | PostgreSQL, CockroachDB, YugabyteDB, TimescaleDB |
+| MySQL protocol | MySQL, MariaDB, TiDB |
+| Embedded | SQLite, DuckDB |
+| Enterprise SQL | Microsoft SQL Server, Oracle Database (needs Oracle Instant Client) |
+| Analytics & cloud | ClickHouse, Trino, Snowflake, Google BigQuery |
+| Key-value | Redis, Valkey |
+| Document & search | MongoDB, Amazon DynamoDB, Elasticsearch, OpenSearch |
+| Wide-column, graph, time-series | Apache Cassandra, ScyllaDB, Neo4j, InfluxDB 3 |
+
+Each engine keeps its native data model: a SQL/CQL/Cypher/PartiQL console where the engine
+has one, a document browser for document and search stores, a key browser for Redis/Valkey.
+Connection fields, properties, authentication and verified versions are listed in
+[docs/engines](docs/engines/README.md). Further engines can be added as signed
+[external connectors](docs/drivers/external-connectors.md).
+
+## Connecting through SSH and VPN
+
+Data sources connect directly, through an **SSH tunnel** (password, key, encrypted key or
+agent; known-hosts verification; jump hosts; shared sessions; automatic reconnection),
+through a **VPN** (an existing system VPN that Relix verifies, or a WireGuard/OpenVPN profile
+Relix brings up with your approval) or through **VPN + SSH**. SSH servers and VPN profiles are
+reusable named configurations, global or per project (`Space n`):
+
+* [Reusable server configurations](docs/connectivity/server-configurations.md)
+* [SSH tunnels](docs/connectivity/ssh-tunnels.md) · [VPN](docs/connectivity/vpn.md)
+* [Examples](docs/connectivity/examples.md) · [Troubleshooting](docs/troubleshooting.md)
+* [Security model](docs/security.md)
 
 ## Installation
 
@@ -203,15 +229,16 @@ Themes, key binding ids, driver registries and project files are documented in
 cargo build --workspace
 cargo test --workspace --all-features
 
-# integration tests against real PostgreSQL, MySQL, MariaDB and Redis
-docker compose -f docker-compose.test.yml up -d --wait
-RELIX_INTEGRATION=1 cargo test --workspace --all-features
+# integration tests against real servers: start the engines of the crate you test
+docker compose -f docker-compose.test.yml up -d --wait mongodb
+RELIX_INTEGRATION=1 cargo test -p relix-driver-mongodb
 
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
-The architecture is described in [ARCHITECTURE.md](ARCHITECTURE.md).
+The architecture is described in [ARCHITECTURE.md](ARCHITECTURE.md); native build
+requirements (DuckDB, Oracle Instant Client) in [docs/engines/deployment.md](docs/engines/deployment.md).
 
 ## Contributing
 

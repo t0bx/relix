@@ -61,3 +61,36 @@ Relix brings up WireGuard (after your approval), connects to `gateway.corp`, ope
 second SSH session through it to `db-bastion.corp`, forwards a local port to `10.20.0.5:5432`
 and connects PostgreSQL to it. Disconnecting the last data source closes both SSH sessions
 and stops the WireGuard tunnel Relix started.
+
+## 5. MongoDB with authentication and TLS
+
+* Engine `MongoDB`, host `mongo.internal`, port `27017`, user `app`, password (saved in the
+  keyring), database `shop`.
+* TLS `verify-full`, CA cert `/etc/ssl/internal-ca.pem`.
+* Properties `authSource=admin; replicaSet=rs0`.
+
+For Atlas or other SRV deployments use the property
+`uri=mongodb+srv://app@cluster0.example.mongodb.net/shop?retryWrites=true` and keep the
+password in the password field — it fills in the credentials the URI leaves out, so the
+secret stays in the keyring. Through an SSH tunnel use `require` instead of `verify-full`
+(the MongoDB client verifies the dialled host), or reach the cluster via VPN.
+
+## 6. Cloud databases with provider credentials
+
+**BigQuery** — run `gcloud auth application-default login` once (or point
+`GOOGLE_APPLICATION_CREDENTIALS` at a service account key), then create a data source with
+engine `BigQuery` and the property `project_id=analytics-prod; location=EU`. No secret is
+stored by Relix; access tokens stay in memory.
+
+**DynamoDB** — configure the AWS CLI (`aws configure sso` or a profile in `~/.aws/config`),
+then use engine `DynamoDB` with `region=eu-central-1; profile=prod`. Leave user and password
+empty so the AWS credential chain is used.
+
+**Snowflake** — create a key pair as described in Snowflake's key-pair authentication guide,
+register the public key on your user, then set user `ANALYST`, password = the key's
+passphrase, and the properties `account=myorg-myaccount; private_key_file=~/.snowflake/rsa_key.p8;
+warehouse=COMPUTE_WH; role=ANALYST`.
+
+Cloud APIs cannot be carried by an SSH port forward (BigQuery and DynamoDB use several
+provider endpoints); use `direct` or `VPN`. Snowflake talks to a single account host and can
+be tunnelled.
