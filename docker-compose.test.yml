@@ -150,7 +150,7 @@ services:
       interval: 2s
       retries: 30
   mssql:
-    image: mcr.microsoft.com/azure-sql-edge:latest
+    image: ${MSSQL_IMAGE:-mcr.microsoft.com/azure-sql-edge:latest}
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: "Relix_test1!"
@@ -182,6 +182,10 @@ services:
     ports:
       - "59042:9042"
     mem_limit: 900m
+    healthcheck:
+      test: ["CMD", "cqlsh", "-u", "cassandra", "-p", "cassandra", "-e", "SELECT now() FROM system.local"]
+      interval: 5s
+      retries: 60
   cassandra:
     image: cassandra:5
     environment:
@@ -191,6 +195,10 @@ services:
     ports:
       - "59043:9042"
     mem_limit: 1536m
+    healthcheck:
+      test: ["CMD", "cqlsh", "-u", "cassandra", "-p", "cassandra", "-e", "SELECT now() FROM system.local"]
+      interval: 5s
+      retries: 60
   neo4j:
     image: neo4j:5
     environment:
@@ -200,12 +208,45 @@ services:
     ports:
       - "57687:7687"
     mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "relix_test_pw", "RETURN 1"]
+      interval: 5s
+      retries: 60
   influxdb:
     image: influxdb:3-core
     command: ["influxdb3", "serve", "--node-id", "relix", "--object-store", "memory", "--without-auth"]
     ports:
       - "58181:8181"
     mem_limit: 512m
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.8
+    environment:
+      CLICKHOUSE_USER: relix
+      CLICKHOUSE_PASSWORD: relix_test
+      CLICKHOUSE_DB: relix_test
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "58123:8123"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--user", "relix", "--password", "relix_test", "-q", "SELECT 1"]
+      interval: 2s
+      retries: 60
+  trino:
+    image: trinodb/trino:476
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx800m
+    ports:
+      - "58080:8080"
+    mem_limit: 1200m
+    healthcheck:
+      test: ["CMD", "trino", "--execute", "SELECT 1"]
+      interval: 5s
+      retries: 60
 configs:
   tidb_config:
     content: |

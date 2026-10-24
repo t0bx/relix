@@ -114,6 +114,9 @@ fn build_driver_manager(
     manager.register_built_in(Arc::new(relix_driver_redis::ValkeyDriver));
     manager.register_built_in(Arc::new(relix_driver_mssql::MsSqlDriver::new()));
     manager.register_built_in(Arc::new(relix_driver_oracle::OracleDriver::new()));
+    manager.register_built_in(Arc::new(relix_driver_duckdb::DuckDbDriver::new()));
+    manager.register_built_in(Arc::new(relix_driver_clickhouse::ClickHouseDriver::new()));
+    manager.register_built_in(Arc::new(relix_driver_trino::TrinoDriver::new()));
     manager.register_built_in(Arc::new(relix_driver_snowflake::SnowflakeDriver::new()));
     manager.register_built_in(Arc::new(relix_driver_bigquery::BigQueryDriver::new()));
     manager.register_built_in(Arc::new(relix_driver_cassandra::CassandraDriver::new()));

@@ -25,6 +25,8 @@ relix-driver-api.workspace = true
 relix-driver-manager = { path = "../relix-driver-manager" }
 relix-driver-bigquery = { path = "../relix-driver-bigquery" }
 relix-driver-cassandra = { path = "../relix-driver-cassandra" }
+relix-driver-clickhouse = { path = "../relix-driver-clickhouse" }
+relix-driver-duckdb = { path = "../relix-driver-duckdb" }
 relix-driver-dynamodb = { path = "../relix-driver-dynamodb" }
 relix-driver-influxdb = { path = "../relix-driver-influxdb" }
 relix-driver-mongodb = { path = "../relix-driver-mongodb" }
@@ -36,6 +38,7 @@ relix-driver-postgres = { path = "../relix-driver-postgres" }
 relix-driver-redis = { path = "../relix-driver-redis" }
 relix-driver-search = { path = "../relix-driver-search" }
 relix-driver-snowflake = { path = "../relix-driver-snowflake" }
+relix-driver-trino = { path = "../relix-driver-trino" }
 relix-driver-sqlite = { path = "../relix-driver-sqlite" }
 relix-project.workspace = true
 relix-tui = { path = "../relix-tui" }
