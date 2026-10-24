@@ -7,8 +7,8 @@ use crate::connection::InfluxDbConnection;
 use async_trait::async_trait;
 use relix_core::{ConnectionConfig, DataModel, Dialect, DriverId};
 use relix_driver_api::{
-    ConnectionTarget, DatabaseConnection, DatabaseDriver, DriverCapabilities, DriverError,
-    DriverMetadata,
+    ConnectionProperty, ConnectionTarget, DatabaseConnection, DatabaseDriver, DriverCapabilities,
+    DriverError, DriverMetadata,
 };
 
 pub(crate) const DEFAULT_PORT: u16 = 8181;
@@ -46,6 +46,23 @@ impl DatabaseDriver for InfluxDbDriver {
         }
     }
 
+    fn connection_properties(&self) -> Vec<ConnectionProperty> {
+        vec![
+            ConnectionProperty::optional(
+                "database",
+                "database used for queries when the database field is empty",
+            ),
+            ConnectionProperty::optional(
+                "query_language",
+                "'sql' (default) or 'influxql' for the query console",
+            ),
+            ConnectionProperty::optional(
+                "path_prefix",
+                "URL path prefix when the API is served behind a reverse proxy",
+            ),
+        ]
+    }
+
     async fn connect(
         &self,
         config: &ConnectionConfig,
@@ -74,5 +91,16 @@ mod tests {
         assert!(capabilities.supports(DatabaseCapability::TimeSeriesQueries));
         assert!(capabilities.supports(DatabaseCapability::SqlExecution));
         assert!(!capabilities.table_editing && !capabilities.transactions);
+    }
+
+    #[test]
+    fn properties_document_the_query_language_switch() {
+        let properties = InfluxDbDriver::new().connection_properties();
+        assert!(
+            properties
+                .iter()
+                .any(|property| property.name == "query_language")
+        );
+        assert!(properties.iter().all(|property| !property.required));
     }
 }
