@@ -128,8 +128,15 @@ mod tests {
         let reachable = probe("127.0.0.1", port, Duration::from_secs(2)).await;
         assert!(reachable.is_reachable(), "{}", reachable.describe());
         drop(listener);
-        let refused = probe("127.0.0.1", port, Duration::from_secs(2)).await;
-        assert!(matches!(refused, ProbeOutcome::Refused(_)));
+
+        // Windows retries SYN after RST and only reports ECONNREFUSED after ~2s,
+        // so the timeout must be comfortably above that
+        let refused = probe("127.0.0.1", port, Duration::from_secs(5)).await;
+        assert!(
+            matches!(refused, ProbeOutcome::Refused(_)),
+            "{}",
+            refused.describe()
+        );
     }
 
     #[test]
