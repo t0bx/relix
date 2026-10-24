@@ -176,6 +176,36 @@ services:
     command: ["--project=relix-test"]
     ports:
       - "59050:9050"
+  scylladb:
+    image: scylladb/scylla
+    command: ["--smp", "1", "--memory", "512M", "--overprovisioned", "1", "--authenticator", "PasswordAuthenticator", "--authorizer", "CassandraAuthorizer", "--auth-superuser-name", "cassandra", "--auth-superuser-salted-password", "\\$$6\\$$acHeRyEUDXZAd02B\\$$T8R40y5wwIT8Ysr.rb7d2Zmd1fjc9ejAuW.TsAoX0/opxG84Xqs5av3.5bhxZNR2qMFM1NQYq7LCwrGq/PmjX."]
+    ports:
+      - "59042:9042"
+    mem_limit: 900m
+  cassandra:
+    image: cassandra:5
+    environment:
+      MAX_HEAP_SIZE: 512M
+      HEAP_NEWSIZE: 128M
+    entrypoint: ["bash", "-c", "sed -i -e 's/AllowAllAuthenticator/PasswordAuthenticator/' -e 's/AllowAllAuthorizer/CassandraAuthorizer/' -e 's/^materialized_views_enabled: false/materialized_views_enabled: true/' /etc/cassandra/cassandra.yaml && exec docker-entrypoint.sh cassandra -f"]
+    ports:
+      - "59043:9042"
+    mem_limit: 1536m
+  neo4j:
+    image: neo4j:5
+    environment:
+      NEO4J_AUTH: neo4j/relix_test_pw
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 128m
+    ports:
+      - "57687:7687"
+    mem_limit: 1g
+  influxdb:
+    image: influxdb:3-core
+    command: ["influxdb3", "serve", "--node-id", "relix", "--object-store", "memory", "--without-auth"]
+    ports:
+      - "58181:8181"
+    mem_limit: 512m
 configs:
   tidb_config:
     content: |

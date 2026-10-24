@@ -116,6 +116,10 @@ fn build_driver_manager(
     manager.register_built_in(Arc::new(relix_driver_oracle::OracleDriver::new()));
     manager.register_built_in(Arc::new(relix_driver_snowflake::SnowflakeDriver::new()));
     manager.register_built_in(Arc::new(relix_driver_bigquery::BigQueryDriver::new()));
+    manager.register_built_in(Arc::new(relix_driver_cassandra::CassandraDriver::new()));
+    manager.register_built_in(Arc::new(relix_driver_cassandra::ScyllaDbDriver::new()));
+    manager.register_built_in(Arc::new(relix_driver_neo4j::Neo4jDriver::new()));
+    manager.register_built_in(Arc::new(relix_driver_influxdb::InfluxDbDriver::new()));
     manager.register_built_in(Arc::new(relix_driver_mongodb::MongoDbDriver));
     manager.register_built_in(Arc::new(relix_driver_dynamodb::DynamoDbDriver));
     manager.register_built_in(Arc::new(relix_driver_search::ElasticsearchDriver));
