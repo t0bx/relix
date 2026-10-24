@@ -5,11 +5,16 @@
 
 use crate::errors::{map_status_error, map_transport_error};
 use relix_core::{ConnectionConfig, Secret, TlsMode};
-use relix_driver_api::{DriverError, ErrorKind};
+use relix_driver_api::{ConnectionProperty, DriverError, ErrorKind};
 use reqwest::{Client, ClientBuilder, Method, RequestBuilder, Response, Url};
 use serde::de::DeserializeOwned;
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
+
+pub const PATH_PREFIX: ConnectionProperty = ConnectionProperty::optional(
+    "path_prefix",
+    "URL path prepended to every request, for servers behind a reverse proxy",
+);
 
 #[derive(Clone, Default)]
 pub enum HttpAuth {
@@ -78,7 +83,10 @@ impl HttpEndpoint {
             TlsMode::Prefer => &["https", "http"],
             TlsMode::Require | TlsMode::VerifyFull => &["https"],
         };
-        let path_prefix = config.settings.property("path_prefix").map(str::to_owned);
+        let path_prefix = config
+            .settings
+            .property(PATH_PREFIX.name)
+            .map(str::to_owned);
         let mut last_error = None;
         for scheme in schemes {
             let endpoint = Self::build(config, &options, scheme, path_prefix.as_deref()).await?;

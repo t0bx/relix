@@ -11,7 +11,7 @@ mod running_job;
 mod text_position;
 
 pub use api_endpoint::RawResponse;
-pub use endpoint::{EndpointOptions, HttpAuth, HttpEndpoint};
+pub use endpoint::{EndpointOptions, HttpAuth, HttpEndpoint, PATH_PREFIX};
 pub use errors::{is_tls_message, map_status_error, map_transport_error};
 pub use poll_backoff::PollBackoff;
 pub use reqwest::{Method, RequestBuilder, Response, StatusCode, Url, header};
