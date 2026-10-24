@@ -86,6 +86,7 @@ async fn connect_client(
     port: u16,
     tds: Config,
 ) -> Result<MsSqlClient, tiberius::error::Error> {
+    relix_tls::install_default_provider();
     let tcp = TcpStream::connect((host, port)).await?;
     tcp.set_nodelay(true)?;
     Client::connect(tds, tcp.compat_write()).await

@@ -11,13 +11,14 @@ repository.workspace = true
 [dependencies]
 relix-core.workspace = true
 relix-driver-api.workspace = true
+relix-tls = { path = "../relix-tls" }
 relix-query = { path = "../relix-query" }
 async-trait.workspace = true
 tokio = { workspace = true, features = ["net"] }
 tokio-util = { version = "0.7.20", features = ["compat"] }
 futures-util = { version = "0.3.31", default-features = false }
 chrono = { version = "0.4.45", default-features = false, features = ["std"] }
-tiberius = { version = "=0.12.3", default-features = false, features = ["tds73", "rustls"] }
+tiberius = { version = "0.13.0", default-features = false, features = ["tds73", "rustls"] }
 
 [dev-dependencies]
 relix-testing = { path = "../relix-testing" }
