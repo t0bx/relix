@@ -61,18 +61,76 @@ jobs:
       - run: cargo test --workspace --all-features --locked
 
   integration:
-    name: Integration tests (PostgreSQL, MySQL, MariaDB, Redis)
+    name: Integration tests (${{ matrix.group }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: postgres-family
+            services: postgres cockroachdb timescaledb yugabytedb
+            ports: ""
+            run: cargo test -p relix-driver-postgres --locked -- --test-threads=1
+          - group: mysql-family-and-redis-family
+            services: mysql mariadb tidb redis valkey
+            ports: "54000"
+            run: cargo test -p relix-driver-mysql -p relix-driver-redis --locked
+          - group: sql-server-oracle
+            services: mssql oracle
+            ports: "51433"
+            run: cargo test -p relix-driver-mssql -p relix-driver-oracle --locked
+          - group: analytics
+            services: clickhouse trino bigquery
+            ports: "59050"
+            run: cargo test -p relix-driver-clickhouse -p relix-driver-trino -p relix-driver-bigquery --locked
+          - group: documents-and-search
+            services: mongodb dynamodb elasticsearch opensearch
+            ports: "58000"
+            run: cargo test -p relix-driver-mongodb -p relix-driver-dynamodb -p relix-driver-search --locked
+          - group: wide-column-graph-time-series
+            services: scylladb cassandra neo4j influxdb
+            ports: ""
+            run: >-
+              RELIX_TEST_CQL_ENGINE=scylladb cargo test -p relix-driver-cassandra --locked &&
+              RELIX_TEST_CQL_ENGINE=cassandra cargo test -p relix-driver-cassandra --locked -- --test-threads=1 &&
+              cargo test -p relix-driver-neo4j -p relix-driver-influxdb --locked
+    env:
+      RELIX_INTEGRATION: "1"
+      MSSQL_IMAGE: mcr.microsoft.com/mssql/server:2022-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: integration-${{ matrix.group }}
+      - name: Install Oracle Instant Client
+        if: matrix.group == 'sql-server-oracle'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libaio1t64 unzip
+          sudo ln -sf /usr/lib/x86_64-linux-gnu/libaio.so.1t64 /usr/lib/x86_64-linux-gnu/libaio.so.1
+          curl -sSfLo /tmp/instantclient.zip https://download.oracle.com/otn_software/linux/instantclient/instantclient-basiclite-linuxx64.zip
+          sudo unzip -q /tmp/instantclient.zip -d /opt/oracle
+          client_dir="$(ls -d /opt/oracle/instantclient_*)"
+          echo "RELIX_TEST_ORACLE_CLIENT_LIB_DIR=$client_dir" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$client_dir" >> "$GITHUB_ENV"
       - name: Start test databases
-        run: docker compose -f docker-compose.test.yml up -d --wait
+        run: docker compose -f docker-compose.test.yml up -d --wait --wait-timeout 600 ${{ matrix.services }}
+      - name: Wait for services without a readiness check
+        if: matrix.ports != ''
+        run: |
+          for port in ${{ matrix.ports }}; do
+            for attempt in $(seq 1 90); do
+              (exec 3<>/dev/tcp/127.0.0.1/$port) 2>/dev/null && break
+              sleep 2
+            done
+          done
+          sleep 20
       - name: Run tests against live databases
-        env:
-          RELIX_INTEGRATION: "1"
-        run: cargo test --workspace --all-features --locked
+        run: ${{ matrix.run }}
+      - name: Show database logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.test.yml logs --tail 200
       - name: Stop test databases
         if: always()
         run: docker compose -f docker-compose.test.yml down -v
