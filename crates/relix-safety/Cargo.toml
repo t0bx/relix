@@ -1,0 +1,20 @@
+[package]
+name = "relix-safety"
+description = "Execution policies and the central write safety assessment for RELIX"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+relix-core.workspace = true
+relix-query = { path = "../relix-query" }
+
+[dev-dependencies]
+pretty_assertions.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
