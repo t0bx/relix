@@ -3,7 +3,7 @@
  * @since 23.10.2026
  */
 
-use crate::classify::{StatementKind, StatementTraits};
+use crate::classify::{StatementKind, StatementTraits, kind_writes};
 use crate::lexer::{significant, tokenize};
 use relix_core::Dialect;
 
@@ -48,7 +48,7 @@ fn traits(kind: StatementKind, destructive: bool) -> StatementTraits {
     StatementTraits {
         kind,
         destructive,
-        writes: !matches!(kind, StatementKind::Query | StatementKind::Session),
+        writes: kind_writes(kind),
     }
 }
 

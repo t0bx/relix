@@ -11,6 +11,7 @@ pub mod history;
 pub mod lexer;
 mod native_classify;
 pub mod ordering;
+mod predicate;
 mod request_splitter;
 pub mod splitter;
 pub mod statement_words;
