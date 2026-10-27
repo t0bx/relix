@@ -7,6 +7,7 @@ pub mod change;
 pub mod datasource;
 pub mod dialect;
 pub mod document;
+pub mod execution_policy;
 pub mod ids;
 pub mod keyvalue;
 pub mod metadata;
@@ -26,6 +27,7 @@ pub use document::{
     CollectionDetails, CollectionInfo, CollectionKind, CollectionRef, Document, DocumentIndex,
     DocumentPage, DocumentQuery, DocumentWrite, DocumentWriteOutcome,
 };
+pub use execution_policy::ExecutionPolicy;
 pub use ids::{DataSourceId, DriverId, ProjectId, ServerConfigId};
 pub use metadata::{
     ColumnInfo, DatabaseInfo, ForeignKeyInfo, IndexInfo, ObjectInfo, ObjectKind, TableDetails,

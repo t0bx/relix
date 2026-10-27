@@ -3,6 +3,7 @@
  * @since 23.10.2026
  */
 
+use crate::execution_policy::ExecutionPolicy;
 use crate::ids::{DataSourceId, DriverId};
 use crate::network::NetworkSettings;
 use serde::{Deserialize, Serialize};
@@ -137,6 +138,8 @@ pub struct DataSourceDefinition {
     pub driver: DriverId,
     #[serde(default)]
     pub environment: Environment,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_policy: Option<ExecutionPolicy>,
     #[serde(default)]
     pub color: Option<String>,
     #[serde(default)]
@@ -152,10 +155,17 @@ impl DataSourceDefinition {
             name: name.into(),
             driver,
             environment: Environment::None,
+            execution_policy: None,
             color: None,
             settings: ConnectionSettings::default(),
             network: NetworkSettings::default(),
         }
+    }
+
+    /// The explicitly chosen execution policy, or the default of the source's environment.
+    pub fn effective_execution_policy(&self) -> ExecutionPolicy {
+        self.execution_policy
+            .unwrap_or_else(|| ExecutionPolicy::for_environment(self.environment))
     }
 }
 
@@ -183,6 +193,7 @@ pub struct ConnectionConfig {
     pub settings: ConnectionSettings,
     pub password: Option<Secret>,
     pub tls_server_name: Option<String>,
+    pub read_only: bool,
 }
 
 impl ConnectionConfig {
@@ -191,7 +202,13 @@ impl ConnectionConfig {
             settings,
             password,
             tls_server_name: None,
+            read_only: false,
         }
+    }
+
+    pub fn with_read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
+        self
     }
 
     pub fn host_or_default(&self) -> &str {
@@ -233,6 +250,28 @@ mod tests {
         assert_eq!(settings.tls.mode, TlsMode::Prefer);
         assert!(settings.properties.is_empty());
         assert_eq!(settings.query_timeout(), None);
+    }
+
+    #[test]
+    fn execution_policy_falls_back_to_the_environment_default() {
+        let mut definition = DataSourceDefinition::new("prod", DriverId::new("postgres"));
+        definition.environment = Environment::Production;
+        assert_eq!(
+            definition.effective_execution_policy(),
+            ExecutionPolicy::ReadOnly
+        );
+        definition.execution_policy = Some(ExecutionPolicy::ConfirmWrites);
+        assert_eq!(
+            definition.effective_execution_policy(),
+            ExecutionPolicy::ConfirmWrites
+        );
+    }
+
+    #[test]
+    fn definitions_without_a_policy_keep_their_serialized_shape() {
+        let definition = DataSourceDefinition::new("dev", DriverId::new("sqlite"));
+        let encoded = serde_json::to_string(&definition).unwrap();
+        assert!(!encoded.contains("execution_policy"));
     }
 
     #[test]
