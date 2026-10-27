@@ -68,6 +68,7 @@ fn driver_capabilities() -> DriverCapabilities {
         table_editing: true,
         routines: true,
         tls: true,
+        read_only_sessions: true,
         ..DriverCapabilities::relational()
     }
 }

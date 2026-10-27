@@ -16,6 +16,7 @@ use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use tokio_postgres::{CancelToken, Config, NoTls, Socket};
 
 const APPLICATION_NAME: &str = "relix";
+const READ_ONLY_OPTIONS: &str = "-c default_transaction_read_only=on";
 
 pub(crate) struct Connector {
     base: Config,
@@ -45,6 +46,9 @@ impl Connector {
             .connect_timeout(timeout);
         if let Some(password) = &config.password {
             base.password(password.expose());
+        }
+        if config.read_only {
+            base.options(READ_ONLY_OPTIONS);
         }
         Ok(Self {
             base,
@@ -158,5 +162,23 @@ mod tests {
         assert_eq!(connector.configured_database(), "defaultdb");
         assert_eq!(connector.base.get_user(), Some("root"));
         assert_eq!(connector.base.get_ports(), &[26257]);
+    }
+
+    #[tokio::test]
+    async fn read_only_configs_start_read_only_sessions() {
+        let settings = ConnectionSettings {
+            tls: TlsSettings {
+                mode: TlsMode::Disable,
+                ca_certificate: None,
+            },
+            ..ConnectionSettings::default()
+        };
+        let config = ConnectionConfig::new(settings, None);
+        let writable = Connector::new(Flavor::Postgres, &config).await.unwrap();
+        assert_eq!(writable.base.get_options(), None);
+        let read_only = Connector::new(Flavor::Postgres, &config.with_read_only(true))
+            .await
+            .unwrap();
+        assert_eq!(read_only.base.get_options(), Some(READ_ONLY_OPTIONS));
     }
 }

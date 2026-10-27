@@ -9,7 +9,7 @@ mod common;
 
 use common::{Engine, for_each_engine};
 
-use relix_core::{StatementOutcome, Value};
+use relix_core::{RowChange, StatementOutcome, Value};
 use relix_driver_api::{ErrorKind, ExecuteOptions};
 use std::time::Duration;
 
@@ -21,6 +21,7 @@ for_each_engine!(
     multi_line_syntax_errors_point_into_the_failing_line,
     session_transactions_span_statements,
     running_statements_can_be_cancelled,
+    read_only_connections_reject_writes,
 );
 
 async fn select_returns_typed_rows(engine: Engine) {
@@ -197,4 +198,45 @@ async fn running_statements_can_be_cancelled(engine: Engine) {
     assert_eq!(result.unwrap_err().kind, ErrorKind::Cancelled);
     common::run(connection.as_ref(), "SELECT 1").await;
     connection.close().await.unwrap();
+}
+
+async fn read_only_connections_reject_writes(engine: Engine) {
+    let Some(config) = engine.config() else {
+        return;
+    };
+    let writer = common::connect(engine, &config).await;
+    let table = common::table_name("exec_read_only");
+    common::run(
+        writer.as_ref(),
+        &format!("CREATE TABLE {table} (id int PRIMARY KEY)"),
+    )
+    .await;
+    common::run(writer.as_ref(), &format!("INSERT INTO {table} VALUES (1)")).await;
+
+    let reader = common::connect(engine, &config.clone().with_read_only(true)).await;
+    let sql = common::sql(reader.as_ref());
+    let count = sql
+        .count_rows(&common::table_ref(&config, &table), None)
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+    let error = sql
+        .execute(&format!("DELETE FROM {table}"), &ExecuteOptions::default())
+        .await
+        .unwrap_err();
+    assert!(error.message.contains("read-only"), "{error}");
+    let changes = relix_core::ChangeSet {
+        table: common::table_ref(&config, &table),
+        changes: vec![RowChange::Delete {
+            key: vec![("id".into(), Value::Int(1))],
+        }],
+    };
+    assert!(
+        sql.apply_changes(&changes).await.is_err(),
+        "data connections are read-only as well"
+    );
+    reader.close().await.unwrap();
+
+    common::run(writer.as_ref(), &format!("DROP TABLE {table}")).await;
+    writer.close().await.unwrap();
 }
