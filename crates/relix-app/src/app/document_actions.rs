@@ -24,6 +24,7 @@ use relix_core::{
     DocumentWriteOutcome,
 };
 use relix_driver_api::DriverError;
+use relix_safety::Operation;
 use serde_json::Value as Json;
 
 const DOCUMENT_PAGE_STEP: isize = 15;
@@ -266,12 +267,14 @@ impl App {
             Some(key) => DocumentWrite::Replace { key, document },
             None => DocumentWrite::Insert { document },
         };
-        self.write_document(tab, write);
+        self.write_document(tab, write, false);
     }
 
     pub(crate) fn save_index_definition(&mut self, tab: TabId, text: String) {
         match serde_json::from_str::<Json>(&text) {
-            Ok(definition) => self.write_document(tab, DocumentWrite::CreateIndex { definition }),
+            Ok(definition) => {
+                self.write_document(tab, DocumentWrite::CreateIndex { definition }, false)
+            }
             Err(error) => {
                 self.notify(Level::Error, format!("invalid index definition: {error}"));
                 self.overlays
@@ -292,31 +295,50 @@ impl App {
             return;
         };
         let label = selected.key_label();
-        let key = selected.key.clone();
+        let write = DocumentWrite::Delete {
+            key: selected.key.clone(),
+        };
+        let source = document.data_source;
         let collection = document.collection.to_string();
-        self.overlays.push(Overlay::Confirm(ConfirmState {
-            title: format!("Delete document {label}?"),
-            lines: vec![format!("The document is removed from {collection}.")],
-            confirm_label: "Delete".into(),
-            danger: true,
-            action: PendingAction::DeleteDocument { tab, key },
-        }));
+        self.confirm_write(
+            source,
+            &Operation::DocumentWrite {
+                collection: &collection,
+                write: &write,
+            },
+            ConfirmState {
+                title: format!("Delete document {label}?"),
+                lines: vec![format!("The document is removed from {collection}.")],
+                confirm_label: "Delete".into(),
+                danger: true,
+                action: PendingAction::WriteDocument {
+                    tab,
+                    write: write.clone(),
+                },
+            },
+        );
     }
 
-    pub(crate) fn delete_document(&mut self, tab: TabId, key: Json) {
-        self.write_document(tab, DocumentWrite::Delete { key });
-    }
-
-    pub(crate) fn drop_document_index(&mut self, tab: TabId, name: String) {
-        self.write_document(tab, DocumentWrite::DropIndex { name });
-    }
-
-    fn write_document(&mut self, tab: TabId, write: DocumentWrite) {
+    /// Writes to the tab's collection once the execution policy allows it.
+    pub(crate) fn write_document(&mut self, tab: TabId, write: DocumentWrite, confirmed: bool) {
         let Some(document) = self.document_tab(tab) else {
             return;
         };
         let source = document.data_source;
         let collection = document.collection.clone();
+        let label = collection.to_string();
+        let operation = Operation::DocumentWrite {
+            collection: &label,
+            write: &write,
+        };
+        if !self.guard_write(source, &operation, confirmed, || {
+            PendingAction::WriteDocument {
+                tab,
+                write: write.clone(),
+            }
+        }) {
+            return;
+        }
         let Some(connection) = self.connection(source) else {
             self.notify(Level::Error, "not connected");
             return;
@@ -425,13 +447,30 @@ impl App {
     }
 
     pub(crate) fn confirm_drop_document_index(&mut self, tab: TabId, name: String) {
-        self.overlays.push(Overlay::Confirm(ConfirmState {
-            title: format!("Drop index '{name}'?"),
-            lines: vec!["Queries that rely on it become slower; data is kept unless the index is the collection itself.".into()],
-            confirm_label: "Drop".into(),
-            danger: true,
-            action: PendingAction::DropDocumentIndex { tab, name },
-        }));
+        let Some(document) = self.document_tab(tab) else {
+            return;
+        };
+        let source = document.data_source;
+        let collection = document.collection.to_string();
+        let title = format!("Drop index '{name}'?");
+        let write = DocumentWrite::DropIndex { name };
+        self.confirm_write(
+            source,
+            &Operation::DocumentWrite {
+                collection: &collection,
+                write: &write,
+            },
+            ConfirmState {
+                title,
+                lines: vec!["Queries that rely on it become slower; data is kept unless the index is the collection itself.".into()],
+                confirm_label: "Drop".into(),
+                danger: true,
+                action: PendingAction::WriteDocument {
+                    tab,
+                    write: write.clone(),
+                },
+            },
+        );
     }
 }
 

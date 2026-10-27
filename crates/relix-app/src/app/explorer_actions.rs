@@ -375,8 +375,12 @@ impl App {
                     .unwrap_or_default()
             ),
         };
+        let policy = self
+            .safety_target(source)
+            .map(|target| target.policy_description())
+            .unwrap_or_default();
         let text = format!(
-            "name         {}\nengine       {}\nlocation     {location}\ndatabase     {}\nuser         {}\ntls          {}\nenvironment  {}\nserver       {server}\nstatus       {:?}",
+            "name         {}\nengine       {}\nlocation     {location}\ndatabase     {}\nuser         {}\ntls          {}\nenvironment  {}\nexecution    {policy}\nserver       {server}\nstatus       {:?}",
             definition.name,
             self.driver_name(&definition.driver),
             settings.database.as_deref().unwrap_or("—"),

@@ -5152,6 +5152,7 @@ dependencies = [
  "relix-editor",
  "relix-project",
  "relix-query",
+ "relix-safety",
  "relix-testing",
  "serde",
  "serde_json",
@@ -5589,6 +5590,16 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-util",
+]
+
+[[package]]
+name = "relix-safety"
+version = "0.1.0"
+dependencies = [
+ "pretty_assertions",
+ "relix-core",
+ "relix-query",
+ "serde_json",
 ]
 
 [[package]]

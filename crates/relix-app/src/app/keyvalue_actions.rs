@@ -27,6 +27,7 @@ use relix_core::keyvalue::{
     ValueRange,
 };
 use relix_driver_api::DriverError;
+use relix_safety::Operation;
 
 const KEY_PAGE: isize = 15;
 
@@ -469,6 +470,15 @@ impl App {
         if line.is_empty() {
             return;
         }
+        self.run_console_command(tab, line, false);
+    }
+
+    /// Sends a console line once the execution policy allows it. A denied or not yet
+    /// confirmed command stays in the input so it can be corrected or confirmed.
+    pub(crate) fn run_console_command(&mut self, tab: TabId, line: String, confirmed: bool) {
+        let Some(kv) = self.kv_tab(tab) else {
+            return;
+        };
         let arguments = match split_command_line(&line) {
             Ok(arguments) => arguments,
             Err(error) => {
@@ -476,11 +486,23 @@ impl App {
                 return;
             }
         };
+        let source = kv.data_source;
+        let operation = Operation::KeyValueCommand(&arguments);
+        if !self.guard_write(source, &operation, confirmed, || {
+            PendingAction::ConsoleCommand {
+                tab,
+                line: line.clone(),
+            }
+        }) {
+            return;
+        }
+        let Some(kv) = self.kv_tab(tab) else {
+            return;
+        };
         kv.console_history.push(&line);
         kv.history_index = None;
         kv.console_input.clear();
         kv.push_console(format!("> {line}"), false, true);
-        let source = kv.data_source;
         let Some(connection) = self.connection(source) else {
             self.notify(Level::Warning, "not connected");
             return;
@@ -513,17 +535,46 @@ impl App {
         }
     }
 
-    fn write_key(&mut self, tab: TabId, operation: KeyValueWrite, rescan: bool) {
+    /// Applies the writes in order once the execution policy allows them; they are
+    /// assessed together, so a multi-step edit is confirmed or denied as a whole.
+    pub(crate) fn write_keys(
+        &mut self,
+        tab: TabId,
+        operations: Vec<KeyValueWrite>,
+        rescan: bool,
+        confirmed: bool,
+    ) {
         let Some(source) = self.kv_tab(tab).map(|kv| kv.data_source) else {
             return;
         };
+        if !self.guard_write(
+            source,
+            &Operation::KeyValueWrites(&operations),
+            confirmed,
+            || PendingAction::WriteKeys {
+                tab,
+                operations: operations.clone(),
+                rescan,
+            },
+        ) {
+            return;
+        }
         let Some(connection) = self.connection(source) else {
             self.notify(Level::Warning, "not connected");
             return;
         };
         self.spawn(async move {
             let result = match loaders::key_value(connection.as_ref()) {
-                Ok(store) => store.write(&operation).await,
+                Ok(store) => {
+                    let mut result = Ok(());
+                    for operation in &operations {
+                        result = store.write(operation).await;
+                        if result.is_err() {
+                            break;
+                        }
+                    }
+                    result
+                }
                 Err(error) => Err(error),
             };
             AppEvent::KeyWritten {
@@ -554,23 +605,30 @@ impl App {
     }
 
     fn confirm_delete_key(&mut self, tab: TabId) {
-        let Some(key) = self
-            .kv_tab(tab)
-            .and_then(|kv| kv.selected_key_name().cloned())
-        else {
+        let Some(kv) = self.kv_tab(tab) else {
             return;
         };
-        self.overlays.push(Overlay::Confirm(ConfirmState {
-            title: "Delete key?".into(),
-            lines: vec![format!("DEL {}", key.display())],
-            confirm_label: "Delete".into(),
-            danger: true,
-            action: PendingAction::DeleteKey { tab, key },
-        }));
-    }
-
-    pub(crate) fn delete_key(&mut self, tab: TabId, key: KeyName) {
-        self.write_key(tab, KeyValueWrite::Delete { key }, true);
+        let Some(key) = kv.selected_key_name().cloned() else {
+            return;
+        };
+        let source = kv.data_source;
+        let lines = vec![format!("DEL {}", key.display())];
+        let operation = KeyValueWrite::Delete { key };
+        self.confirm_write(
+            source,
+            &Operation::KeyValueWrites(std::slice::from_ref(&operation)),
+            ConfirmState {
+                title: "Delete key?".into(),
+                lines,
+                confirm_label: "Delete".into(),
+                danger: true,
+                action: PendingAction::WriteKeys {
+                    tab,
+                    operations: vec![operation.clone()],
+                    rescan: true,
+                },
+            },
+        );
     }
 
     fn confirm_delete_element(&mut self, tab: TabId) {
@@ -584,47 +642,29 @@ impl App {
             self.notify(Level::Info, "removing single list/stream elements is not supported; use the console (LREM/XDEL)");
             return;
         }
+        let source = kv.data_source;
+        let Some(operation) = element_removal(kv) else {
+            return;
+        };
         let label = item.field.as_ref().map_or_else(
             || String::from_utf8_lossy(&item.value).into_owned(),
             |field| String::from_utf8_lossy(field).into_owned(),
         );
-        self.overlays.push(Overlay::Confirm(ConfirmState {
-            title: "Remove element?".into(),
-            lines: vec![label],
-            confirm_label: "Remove".into(),
-            danger: true,
-            action: PendingAction::DeleteElement { tab },
-        }));
-    }
-
-    pub(crate) fn delete_element(&mut self, tab: TabId) {
-        let Some(kv) = self.kv_tab(tab) else {
-            return;
-        };
-        let (Some(key), Some(item), Some(key_type)) = (
-            kv.selected_key_name().cloned(),
-            kv.selected_item().cloned(),
-            kv.key_type().cloned(),
-        ) else {
-            return;
-        };
-        let operation = match key_type {
-            KeyType::Hash => item
-                .field
-                .map(|field| KeyValueWrite::HashDelete { key, field }),
-            KeyType::Set => Some(KeyValueWrite::SetRemove {
-                key,
-                member: item.value,
-            }),
-            KeyType::SortedSet => Some(KeyValueWrite::SortedSetRemove {
-                key,
-                member: item.value,
-            }),
-            _ => None,
-        };
-        if let Some(operation) = operation {
-            self.write_key(tab, operation, false);
-        }
+        self.confirm_write(
+            source,
+            &Operation::KeyValueWrites(std::slice::from_ref(&operation)),
+            ConfirmState {
+                title: "Remove element?".into(),
+                lines: vec![label],
+                confirm_label: "Remove".into(),
+                danger: true,
+                action: PendingAction::WriteKeys {
+                    tab,
+                    operations: vec![operation.clone()],
+                    rescan: false,
+                },
+            },
+        );
     }
 
     fn prompt_ttl(&mut self, tab: TabId) {
@@ -656,7 +696,7 @@ impl App {
                 }
             }
         };
-        self.write_key(tab, operation, false);
+        self.write_keys(tab, vec![operation], false, false);
     }
 
     fn edit_key_value(&mut self, tab: TabId) {
@@ -726,13 +766,14 @@ impl App {
                         relix_core::keyvalue::Ttl::Seconds(seconds) => u64::try_from(seconds).ok(),
                         _ => None,
                     });
-                self.write_key(
+                self.write_keys(
                     tab,
-                    KeyValueWrite::SetString {
+                    vec![KeyValueWrite::SetString {
                         key,
                         value: text.into_bytes(),
                         ttl_seconds: ttl,
-                    },
+                    }],
+                    false,
                     false,
                 );
             }
@@ -756,49 +797,49 @@ impl App {
         ) else {
             return;
         };
-        let operation = match key_type {
-            KeyType::Hash => item.field.map(|field| KeyValueWrite::HashSet {
-                key,
-                field,
-                value: text.into_bytes(),
+        let operations = match key_type {
+            KeyType::Hash => item.field.map(|field| {
+                vec![KeyValueWrite::HashSet {
+                    key,
+                    field,
+                    value: text.into_bytes(),
+                }]
             }),
             KeyType::List => item
                 .index
                 .and_then(|index| i64::try_from(index).ok())
-                .map(|index| KeyValueWrite::ListSet {
-                    key,
-                    index,
-                    value: text.into_bytes(),
+                .map(|index| {
+                    vec![KeyValueWrite::ListSet {
+                        key,
+                        index,
+                        value: text.into_bytes(),
+                    }]
                 }),
             KeyType::SortedSet => match text.trim().parse::<f64>() {
-                Ok(score) => Some(KeyValueWrite::SortedSetAdd {
+                Ok(score) => Some(vec![KeyValueWrite::SortedSetAdd {
                     key,
                     member: item.value,
                     score,
-                }),
+                }]),
                 Err(_) => {
                     self.notify(Level::Error, "score must be a number");
                     return;
                 }
             },
-            KeyType::Set => {
-                self.write_key(
-                    tab,
-                    KeyValueWrite::SetRemove {
-                        key: key.clone(),
-                        member: item.value,
-                    },
-                    false,
-                );
-                Some(KeyValueWrite::SetAdd {
+            KeyType::Set => Some(vec![
+                KeyValueWrite::SetRemove {
+                    key: key.clone(),
+                    member: item.value,
+                },
+                KeyValueWrite::SetAdd {
                     key,
                     member: text.into_bytes(),
-                })
-            }
+                },
+            ]),
             _ => None,
         };
-        match operation {
-            Some(operation) => self.write_key(tab, operation, false),
+        match operations {
+            Some(operations) => self.write_keys(tab, operations, false, false),
             None => self.notify(Level::Info, "this element type cannot be edited inline"),
         }
     }
@@ -829,14 +870,14 @@ impl App {
             return;
         };
         match parse_element(&key_type, key, text) {
-            Ok(operation) => self.write_key(tab, operation, false),
+            Ok(operation) => self.write_keys(tab, vec![operation], false, false),
             Err(error) => self.notify(Level::Error, error),
         }
     }
 
     pub(crate) fn create_key(&mut self, tab: TabId, text: &str) {
         match parse_new_key(text) {
-            Ok(operation) => self.write_key(tab, operation, true),
+            Ok(operation) => self.write_keys(tab, vec![operation], true, false),
             Err(error) => self.notify(Level::Error, error),
         }
     }
@@ -862,6 +903,26 @@ impl App {
 
 /// Splits a console line into arguments like `redis-cli`: whitespace separated, with
 /// single or double quotes grouping words and backslash escapes inside double quotes.
+/// The write that removes the selected hash field, set member or sorted-set member.
+fn element_removal(kv: &KeyValueTab) -> Option<KeyValueWrite> {
+    let key = kv.selected_key_name().cloned()?;
+    let item = kv.selected_item().cloned()?;
+    match kv.key_type()? {
+        KeyType::Hash => item
+            .field
+            .map(|field| KeyValueWrite::HashDelete { key, field }),
+        KeyType::Set => Some(KeyValueWrite::SetRemove {
+            key,
+            member: item.value,
+        }),
+        KeyType::SortedSet => Some(KeyValueWrite::SortedSetRemove {
+            key,
+            member: item.value,
+        }),
+        _ => None,
+    }
+}
+
 pub fn split_command_line(line: &str) -> Result<Vec<String>, String> {
     let mut arguments = Vec::new();
     let mut current = String::new();

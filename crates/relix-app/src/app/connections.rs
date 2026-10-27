@@ -37,7 +37,11 @@ pub struct ConnectionIndicator {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Deferred {
     ExpandNode(String),
-    RunEditor { tab: TabId, script: bool },
+    RunEditor {
+        tab: TabId,
+        script: bool,
+        confirmed: bool,
+    },
     LoadTable(TabId),
     ScanKeys(TabId),
     LoadDocuments(TabId),
@@ -200,7 +204,9 @@ impl App {
                 _ => None,
             };
             let credentials = resolve_credentials(secrets, credentials).await;
-            let config = ConnectionConfig::new(definition.settings, password);
+            let read_only = definition.effective_execution_policy().is_read_only();
+            let config =
+                ConnectionConfig::new(definition.settings, password).with_read_only(read_only);
             let result = network
                 .connect(driver.as_ref(), &config, &plan, &credentials)
                 .await;
@@ -340,13 +346,17 @@ impl App {
         for action in deferred {
             match action {
                 Deferred::ExpandNode(key) => self.load_explorer_key(&key),
-                Deferred::RunEditor { tab, script } => {
+                Deferred::RunEditor {
+                    tab,
+                    script,
+                    confirmed,
+                } => {
                     if self.workspace.tab(tab).is_some() {
                         self.workspace.activate_tab(tab);
                         if let Some(Tab::Editor(editor)) = self.workspace.tab_mut(tab) {
                             editor.running = None;
                         }
-                        self.run_editor(script, false);
+                        self.run_editor(script, confirmed);
                     }
                 }
                 Deferred::LoadTable(tab) => self.load_table(tab),
@@ -509,7 +519,9 @@ impl App {
                 (None, None) => None,
             };
             let credentials = resolve_credentials(secrets, credentials).await;
-            let config = ConnectionConfig::new(definition.settings, password);
+            let read_only = definition.effective_execution_policy().is_read_only();
+            let config =
+                ConnectionConfig::new(definition.settings, password).with_read_only(read_only);
             let result = network
                 .test(driver.as_ref(), &config, &plan, &credentials)
                 .await;

@@ -15,7 +15,7 @@ use crate::events::AppEvent;
 use crate::grid::{Editability, GridState};
 use crate::input::LineInput;
 use crate::notifications::Level;
-use crate::overlay::{ConfirmState, Overlay, PendingAction, PromptAction};
+use crate::overlay::{PendingAction, PromptAction};
 use crate::result_query::ResultQuery;
 use crate::tab::Tab;
 use crate::workspace::TabId;
@@ -28,6 +28,7 @@ use relix_query::splitter::{split_statements, statement_at};
 use relix_query::{
     HistoryEntry, ScriptOutcome, ScriptRequest, StatementKind, StatementReport, classify,
 };
+use relix_safety::Operation;
 use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
 
@@ -352,8 +353,8 @@ impl App {
         true
     }
 
-    /// Executes the selection, the statement under the cursor or the whole script. On
-    /// production/staging data sources, destructive statements need confirmation first.
+    /// Executes the selection, the statement under the cursor or the whole script. The
+    /// statements are assessed together against the data source's execution policy first.
     pub(crate) fn run_editor(&mut self, script: bool, confirmed: bool) {
         let Some(tab_id) = self.workspace.active_tab_id() else {
             return;
@@ -394,35 +395,17 @@ impl App {
             self.notify(Level::Info, "nothing to execute");
             return;
         }
-        if !confirmed && self.requires_destructive_confirmation(source, &statements, dialect) {
-            let name = self
-                .data_source(source)
-                .map(|definition| definition.name.clone())
-                .unwrap_or_default();
-            self.overlays.push(Overlay::Confirm(ConfirmState {
-                title: "Run destructive statement?".into(),
-                lines: std::iter::once(format!(
-                    "Data source '{name}' is marked as a protected environment."
-                ))
-                .chain(
-                    statements
-                        .iter()
-                        .filter(|(text, _)| classify(text, dialect).destructive)
-                        .map(|(text, _)| {
-                            format!(
-                                "  {}",
-                                relix_core::value::truncate_chars(&text.replace('\n', " "), 70)
-                            )
-                        }),
-                )
-                .collect(),
-                confirm_label: "Execute".into(),
-                danger: true,
-                action: PendingAction::RunStatements {
-                    tab: tab_id,
-                    script,
-                },
-            }));
+        let (statements, offsets): (Vec<String>, Vec<usize>) = statements.into_iter().unzip();
+        let operation = Operation::Statements {
+            statements: &statements,
+            dialect,
+        };
+        if !self.guard_write(source, &operation, confirmed, || {
+            PendingAction::RunStatements {
+                tab: tab_id,
+                script,
+            }
+        }) {
             return;
         }
         let Some(connection) = self.connection_or_defer(
@@ -430,6 +413,7 @@ impl App {
             Deferred::RunEditor {
                 tab: tab_id,
                 script,
+                confirmed,
             },
         ) else {
             self.status = "connecting…".into();
@@ -444,9 +428,8 @@ impl App {
             .unwrap_or(self.settings.query.row_limit);
         let timeout = (self.settings.query.timeout_secs > 0)
             .then(|| Duration::from_secs(self.settings.query.timeout_secs));
-        let offsets: Vec<usize> = statements.iter().map(|(_, offset)| *offset).collect();
         let script_request = ScriptRequest {
-            statements: statements.into_iter().map(|(text, _)| text).collect(),
+            statements,
             options: ExecuteOptions { row_limit },
             timeout,
         };
@@ -485,27 +468,6 @@ impl App {
             }
             let _ = sender.send(AppEvent::ScriptFinished { tab: tab_id, request, outcome }).await;
         });
-    }
-
-    fn requires_destructive_confirmation(
-        &self,
-        source: DataSourceId,
-        statements: &[(String, usize)],
-        dialect: Dialect,
-    ) -> bool {
-        let protected = self
-            .data_source(source)
-            .is_some_and(|definition| definition.environment.requires_confirmation());
-        let enabled = self
-            .project
-            .as_ref()
-            .and_then(|project| project.settings.confirm_destructive)
-            .unwrap_or(self.settings.query.confirm_destructive);
-        protected
-            && enabled
-            && statements
-                .iter()
-                .any(|(text, _)| classify(text, dialect).destructive)
     }
 
     pub(crate) fn on_statement_report(

@@ -16,6 +16,7 @@ relix-driver-api.workspace = true
 relix-editor = { path = "../relix-editor" }
 relix-project.workspace = true
 relix-query = { path = "../relix-query" }
+relix-safety = { path = "../relix-safety" }
 async-trait.workspace = true
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "serde", "std"] }
 serde.workspace = true

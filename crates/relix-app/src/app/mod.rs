@@ -22,6 +22,9 @@ mod overlay_input;
 mod pickers;
 mod projects;
 mod results_actions;
+mod safety;
+#[cfg(test)]
+mod safety_workflow_tests;
 mod server_checks;
 mod server_configs;
 mod server_form_actions;

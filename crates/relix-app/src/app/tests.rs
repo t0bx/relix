@@ -13,7 +13,7 @@ use crate::overlay::Overlay;
 use crate::tab::Tab;
 use crate::test_support::AppHarness as Harness;
 use relix_config::{KeyChord, KeyCode, Modifiers};
-use relix_core::{DataSourceDefinition, DriverId, Environment, Value};
+use relix_core::{DataSourceDefinition, DriverId, Environment, ExecutionPolicy, Value};
 use relix_testing::mock_key_value::{MockKeyValueDriver, MockValue};
 use std::sync::Arc;
 
@@ -220,12 +220,17 @@ async fn completion_uses_live_metadata() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn destructive_statements_need_confirmation_on_production() {
+async fn destructive_statements_need_confirmation_on_unrestricted_production() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("prod.db");
     let mut harness = Harness::new(dir.path(), vec![Arc::new(MockKeyValueDriver::default())]);
     harness.app.startup(Some("Production"));
-    let source = harness.add_sqlite("Main", &db, Environment::Production);
+    let mut definition = DataSourceDefinition::new("Main", DriverId::from("sqlite"));
+    definition.settings.file_path = Some(db);
+    definition.settings.create_if_missing = true;
+    definition.environment = Environment::Production;
+    definition.execution_policy = Some(ExecutionPolicy::Unrestricted);
+    let source = harness.add_data_source(definition);
     harness
         .run_sql(
             source,

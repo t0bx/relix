@@ -12,8 +12,8 @@ use crate::ssh_form::SshForm;
 use crate::vpn_form::VpnForm;
 use crate::workspace::{PaneId, TabId};
 use relix_connections::HostKeyPrompt;
-use relix_core::keyvalue::KeyName;
-use relix_core::{DataSourceId, DriverId, ProjectId, ServerConfigId};
+use relix_core::keyvalue::{KeyName, KeyValueWrite};
+use relix_core::{DataSourceId, DocumentWrite, DriverId, ProjectId, ServerConfigId};
 use relix_editor::TextBuffer;
 use relix_project::{ServerSecret, TransferMode};
 
@@ -139,12 +139,14 @@ pub enum PendingAction {
         tab: TabId,
         script: bool,
     },
-    DeleteKey {
+    WriteKeys {
         tab: TabId,
-        key: KeyName,
+        operations: Vec<KeyValueWrite>,
+        rescan: bool,
     },
-    DeleteElement {
+    ConsoleCommand {
         tab: TabId,
+        line: String,
     },
     InstallDriver {
         offer: InstallOffer,
@@ -161,13 +163,9 @@ pub enum PendingAction {
         retry: Option<DataSourceId>,
     },
     ConnectVpn(ServerConfigId),
-    DeleteDocument {
+    WriteDocument {
         tab: TabId,
-        key: serde_json::Value,
-    },
-    DropDocumentIndex {
-        tab: TabId,
-        name: String,
+        write: DocumentWrite,
     },
     DeleteServerConfig(ServerConfigId),
     TransferServerConfig {

@@ -27,6 +27,7 @@ use relix_driver_api::DriverError;
 use relix_editor::{CatalogTable, CompletionCatalog, CompletionItem, CompletionKind, complete};
 use relix_project::SplitDirection;
 use relix_query::RecentList;
+use relix_safety::Operation;
 
 const FILTER_HISTORY_SIZE: usize = 30;
 const VALUE_SUGGESTIONS: usize = 20;
@@ -159,6 +160,11 @@ impl App {
         request: RequestId,
         result: Result<RowBatch, DriverError>,
     ) {
+        let read_only = self
+            .workspace
+            .tab(tab)
+            .and_then(Tab::data_source)
+            .is_some_and(|source| self.is_read_only(source));
         let Some(table) = self.table_tab(tab) else {
             return;
         };
@@ -176,7 +182,7 @@ impl App {
                     None => {
                         let mut grid = GridState::from_batch(
                             &batch,
-                            table_editability(table.details.as_ref()),
+                            table_editability(table.details.as_ref(), read_only),
                         );
                         grid.hide_columns_named(&table.restore_hidden);
                         grid.view = table.restore_view;
@@ -454,13 +460,20 @@ impl App {
         let danger = self
             .data_source(source)
             .is_some_and(|definition| definition.environment.requires_confirmation());
-        self.overlays.push(Overlay::Confirm(ConfirmState {
-            title: "Review pending changes".into(),
-            lines,
-            confirm_label: "Commit".into(),
-            danger,
-            action: PendingAction::CommitChanges(tab),
-        }));
+        self.confirm_write(
+            source,
+            &Operation::TableChanges {
+                table: &name,
+                changes: total,
+            },
+            ConfirmState {
+                title: "Review pending changes".into(),
+                lines,
+                confirm_label: "Commit".into(),
+                danger,
+                action: PendingAction::CommitChanges(tab),
+            },
+        );
     }
 
     pub(crate) fn commit_changes(&mut self, tab: TabId) {
@@ -478,6 +491,19 @@ impl App {
             }
         };
         let source = table.data_source;
+        let name = table.table.to_string();
+        let operation = Operation::TableChanges {
+            table: &name,
+            changes: changes.changes.len(),
+        };
+        if !self.guard_write(source, &operation, true, || {
+            PendingAction::CommitChanges(tab)
+        }) {
+            return;
+        }
+        let Some(table) = self.table_tab(tab) else {
+            return;
+        };
         table.loading = true;
         let Some(connection) = self.connection(source) else {
             self.notify(Level::Error, "not connected");
@@ -762,7 +788,10 @@ impl App {
     }
 }
 
-fn table_editability(details: Option<&TableDetails>) -> Editability {
+fn table_editability(details: Option<&TableDetails>, read_only: bool) -> Editability {
+    if read_only {
+        return Editability::ReadOnly("the data source's execution policy is read-only".into());
+    }
     let Some(details) = details else {
         return Editability::ReadOnly("table metadata unavailable".into());
     };

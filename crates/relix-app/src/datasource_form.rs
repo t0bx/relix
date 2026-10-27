@@ -7,12 +7,14 @@ use crate::form::{FieldValue, FormCommand, FormField, FormRow, FormState, FormSt
 use crate::services::DriverDescriptor;
 use relix_config::KeyChord;
 use relix_core::{
-    ConnectionSettings, DataSourceDefinition, DataSourceId, DriverId, Environment, NetworkMode,
-    NetworkSettings, Secret, ServerConfigId, TlsMode, TlsSettings,
+    ConnectionSettings, DataSourceDefinition, DataSourceId, DriverId, Environment, ExecutionPolicy,
+    NetworkMode, NetworkSettings, Secret, ServerConfigId, TlsMode, TlsSettings,
 };
 use relix_driver_api::ConnectionTarget;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+
+const ENVIRONMENT_DEFAULT_POLICY: &str = "environment default";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FieldId {
@@ -35,6 +37,7 @@ pub enum FieldId {
     QueryTimeout,
     Properties,
     Environment,
+    ExecutionPolicy,
     Color,
     SavePassword,
 }
@@ -274,6 +277,25 @@ impl DataSourceForm {
                     .position(|environment| *environment == definition.environment)
                     .unwrap_or(0),
             ),
+            FormField::choice(
+                FieldId::ExecutionPolicy,
+                "Execution",
+                std::iter::once(ENVIRONMENT_DEFAULT_POLICY.to_owned())
+                    .chain(
+                        ExecutionPolicy::ALL
+                            .iter()
+                            .map(|policy| policy.label().to_owned()),
+                    )
+                    .collect(),
+                definition
+                    .execution_policy
+                    .and_then(|chosen| {
+                        ExecutionPolicy::ALL
+                            .iter()
+                            .position(|policy| *policy == chosen)
+                    })
+                    .map_or(0, |index| index + 1),
+            ),
             FormField::text(
                 FieldId::Color,
                 "Color",
@@ -494,6 +516,11 @@ impl DataSourceForm {
                 .form
                 .choice(FieldId::Environment)
                 .min(Environment::ALL.len() - 1)],
+            execution_policy: self
+                .form
+                .choice(FieldId::ExecutionPolicy)
+                .checked_sub(1)
+                .and_then(|index| ExecutionPolicy::ALL.get(index).copied()),
             color,
             settings,
             network,
@@ -807,5 +834,22 @@ mod tests {
         assert_eq!(definition.settings.query_timeout_secs, Some(30));
         assert_eq!(definition.settings.property("role"), Some("analyst"));
         assert_eq!(password, None);
+    }
+
+    #[test]
+    fn execution_policy_defaults_to_the_environment_and_round_trips() {
+        let mut form = DataSourceForm::new(drivers(), None, servers());
+        form.form.set_text(FieldId::Name, "Orders");
+        let (definition, _) = form.build().unwrap();
+        assert_eq!(definition.execution_policy, None);
+
+        form.form.set_choice(FieldId::ExecutionPolicy, 2);
+        let (definition, _) = form.build().unwrap();
+        assert_eq!(
+            definition.execution_policy,
+            Some(ExecutionPolicy::ConfirmWrites)
+        );
+        let reopened = DataSourceForm::new(drivers(), Some(&definition), servers());
+        assert_eq!(reopened.form.choice(FieldId::ExecutionPolicy), 2);
     }
 }

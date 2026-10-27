@@ -279,14 +279,19 @@ impl App {
                 self.workspace.activate_tab(tab);
                 self.run_editor(script, true);
             }
-            PendingAction::DeleteKey { tab, key } => self.delete_key(tab, key),
-            PendingAction::DeleteElement { tab } => self.delete_element(tab),
+            PendingAction::WriteKeys {
+                tab,
+                operations,
+                rescan,
+            } => self.write_keys(tab, operations, rescan, true),
+            PendingAction::ConsoleCommand { tab, line } => {
+                self.run_console_command(tab, line, true)
+            }
             PendingAction::InstallDriver { offer, retry } => self.install_driver(offer, retry),
             PendingAction::TrustHostKey { prompt, retry } => self.trust_host_key(&prompt, retry),
             PendingAction::ApproveVpn { profile, retry } => self.approve_vpn(profile, retry),
             PendingAction::ConnectVpn(profile) => self.approve_and_connect_vpn(profile),
-            PendingAction::DeleteDocument { tab, key } => self.delete_document(tab, key),
-            PendingAction::DropDocumentIndex { tab, name } => self.drop_document_index(tab, name),
+            PendingAction::WriteDocument { tab, write } => self.write_document(tab, write, true),
             PendingAction::DeleteServerConfig(id) => self.delete_server_config(id),
             PendingAction::TransferServerConfig { id, mode } => {
                 self.transfer_server_config(id, mode)
