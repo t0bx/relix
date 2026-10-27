@@ -40,6 +40,7 @@ asynchronous services.
 | `relix-connections` | Connection manager: resolves a data source's network route (direct, SSH, VPN, VPN + SSH), acquires leases and connects the driver to the resulting endpoint |
 | `relix-connector-sdk` | Library for writing external connectors plus the reference `relix-csv-connector` |
 | `relix-query` | SQL lexer, statement splitter, statement classification, script execution coordination (cancellation, timeouts), history, export, result wrapping for server-side paging |
+| `relix-safety` | Execution policies: classifies the steps of a write (statements, grid change sets, key-value writes and commands, document writes), flags risky ones and decides allow / confirm / deny for a data source — the single enforcement point of every write path |
 | `relix-editor` | Text buffer with undo/redo, movement, search/replace, highlighting, diagnostics, completion engine |
 | `relix-app` | Application state and behaviour: commands and keymap, workspace (panes/tabs), explorer, editor/table/key-value tabs, data grid, overlays, connection lifecycle, background tasks, session save/restore |
 | `relix-tui` | Ratatui rendering, crossterm input mapping, terminal lifecycle, event loop, colour handling |
@@ -50,6 +51,7 @@ asynchronous services.
 ```text
 relix ─┬─> relix-tui ──────> relix-app ─┬─> relix-editor ──> relix-query ──> relix-driver-api ──> relix-core
        │                                ├─> relix-query
+       │                                ├─> relix-safety ──> relix-query, relix-core
        │                                ├─> relix-project ──> relix-config
        │                                ├─> relix-connections ─┬─> relix-ssh
        │                                │                      ├─> relix-vpn
@@ -127,6 +129,24 @@ Errors are typed (`DriverError` with an `ErrorKind`, detail and position) so the
 distinguish authentication failures (prompt for a password), lost connections (mark the
 source disconnected, never retry a statement whose outcome is unknown), conflicts and
 syntax errors (underline the position in the editor).
+
+## Execution safety
+
+```text
+editor run / grid commit / key-value write / console command / document write
+  └─ App::guard_write(source, Operation)            relix-app/src/app/safety.rs
+       └─ relix_safety::assess(SafetyTarget, Operation)
+            ├─ Allow   → run
+            ├─ Confirm → dialog naming target + policy, action re-enters with confirmed = true
+            └─ Deny    → error notification, nothing is sent
+```
+
+* `SafetyTarget` is built from the data source definition: name, configured database,
+  environment, effective `ExecutionPolicy` (explicit or derived from the environment), the
+  destructive-confirmation setting and whether the driver enforces read-only sessions.
+* Denials cannot be confirmed away; confirmed actions are assessed again when they run.
+* Read-only sources connect with `ConnectionConfig::read_only`; drivers that declare
+  `read_only_sessions` make every session they open refuse writes.
 
 ## Connection management
 

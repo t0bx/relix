@@ -75,7 +75,11 @@ the terminal.
 - **Safety** — passwords live in the OS credential store (Keychain, Windows Credential
   Manager, Secret Service) and never in project files or logs; configuration files are
   written atomically with owner-only permissions; production/staging data sources are
-  colour-coded and destructive statements require confirmation there.
+  colour-coded. Per data source [execution policies](docs/execution-policies.md)
+  (`read-only`, `confirm writes`, `unrestricted`) apply to the editor, grid commits and
+  key-value/document writes alike; production defaults to read-only, enforced by
+  PostgreSQL, MySQL/MariaDB and SQLite sessions themselves, and every prompt names the exact
+  target connection.
 - **Themes** — dark, light and high-contrast themes, custom theme files and per-colour
   overrides with automatic 256-colour fallback.
 

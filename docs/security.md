@@ -33,6 +33,15 @@ strict rules.
 * Cloud drivers use the providers' standard credential chains and keep short-lived access
   tokens in memory only.
 
+## Writes to protected data sources
+
+Every write workflow consults the data source's execution policy in one place before it
+touches the database: read-only sources refuse writes (and, for PostgreSQL, MySQL/MariaDB and
+SQLite, open read-only database sessions as well), `confirm writes` asks first and names the
+exact target connection. Statement parsing is a safeguard, not a security boundary; use a
+read-only database account where a hard guarantee is required. See
+[execution policies](execution-policies.md).
+
 ## Privileged operations
 
 Relix never runs as an administrator. Starting or stopping a managed VPN runs one command

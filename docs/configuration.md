@@ -46,7 +46,7 @@ auto_complete = true            # open completion while typing identifiers or af
 row_limit = 500                 # rows fetched per editor statement (has_more is shown)
 page_size = 200                 # rows per page in table tabs and re-queried results
 timeout_secs = 300              # cancel statements after this many seconds, 0 = never
-confirm_destructive = true      # confirm DROP/TRUNCATE/unbounded DELETE+UPDATE on staging/production
+confirm_destructive = true      # confirm DROP/TRUNCATE/unbounded DELETE+UPDATE on unrestricted staging/production sources
 history_limit = 1000            # query history entries kept per project
 
 [drivers]
@@ -133,6 +133,7 @@ id = "7a4e…"
 name = "Main PG"
 driver = "postgres"         # postgres, mysql, mariadb, sqlite, redis or an external driver id
 environment = "production"  # none, development, testing, staging, production
+execution_policy = "confirm_writes"  # read_only, confirm_writes, unrestricted; omit for the environment default
 color = "#ff5370"
 
 [data_sources.settings]
@@ -147,6 +148,9 @@ save_password = true        # store the password in the OS credential store
 mode = "verify_full"        # disable, prefer, require, verify_full
 ca_certificate = "/etc/ssl/internal-ca.pem"
 ```
+
+Without `execution_policy` production sources are read-only, staging sources confirm every
+write and all others are unrestricted; see [execution policies](execution-policies.md).
 
 SQLite data sources use `file_path` (or `":memory:"`) and `create_if_missing`; Redis uses
 `database` for the numeric database index.
