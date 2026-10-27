@@ -25,6 +25,7 @@ pub enum DatabaseCapability {
     StreamingResults,
     Routines,
     Tls,
+    ReadOnlySessions,
 }
 
 impl DatabaseCapability {
@@ -46,6 +47,7 @@ impl DatabaseCapability {
             Self::StreamingResults => "streaming results",
             Self::Routines => "routines",
             Self::Tls => "TLS",
+            Self::ReadOnlySessions => "database-enforced read-only sessions",
         }
     }
 }
@@ -66,6 +68,8 @@ pub struct DriverCapabilities {
     pub index_management: bool,
     #[serde(default)]
     pub streaming_results: bool,
+    #[serde(default)]
+    pub read_only_sessions: bool,
 }
 
 impl DriverCapabilities {
@@ -82,6 +86,7 @@ impl DriverCapabilities {
             query_execution: true,
             index_management: false,
             streaming_results: false,
+            read_only_sessions: false,
         }
     }
 
@@ -150,6 +155,7 @@ impl DriverCapabilities {
             DatabaseCapability::StreamingResults => self.streaming_results,
             DatabaseCapability::Routines => self.routines,
             DatabaseCapability::Tls => self.tls,
+            DatabaseCapability::ReadOnlySessions => self.read_only_sessions,
         }
     }
 
@@ -162,7 +168,7 @@ impl DriverCapabilities {
     }
 }
 
-const ALL_CAPABILITIES: [DatabaseCapability; 16] = [
+const ALL_CAPABILITIES: [DatabaseCapability; 17] = [
     DatabaseCapability::SqlExecution,
     DatabaseCapability::QueryExecution,
     DatabaseCapability::Transactions,
@@ -179,6 +185,7 @@ const ALL_CAPABILITIES: [DatabaseCapability; 16] = [
     DatabaseCapability::StreamingResults,
     DatabaseCapability::Routines,
     DatabaseCapability::Tls,
+    DatabaseCapability::ReadOnlySessions,
 ];
 
 fn default_true() -> bool {
@@ -196,6 +203,7 @@ mod tests {
         let capabilities: DriverCapabilities = serde_json::from_str(legacy).unwrap();
         assert!(capabilities.query_execution);
         assert!(!capabilities.index_management);
+        assert!(!capabilities.read_only_sessions);
     }
 
     #[test]
