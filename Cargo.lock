@@ -5101,7 +5101,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "relix"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5139,7 +5139,7 @@ dependencies = [
 
 [[package]]
 name = "relix-app"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5165,7 +5165,7 @@ dependencies = [
 
 [[package]]
 name = "relix-config"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "directories",
  "pretty_assertions",
@@ -5177,7 +5177,7 @@ dependencies = [
 
 [[package]]
 name = "relix-connections"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "relix-core",
@@ -5194,7 +5194,7 @@ dependencies = [
 
 [[package]]
 name = "relix-connector-sdk"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "csv",
@@ -5212,7 +5212,7 @@ dependencies = [
 
 [[package]]
 name = "relix-core"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "pretty_assertions",
  "serde",
@@ -5222,7 +5222,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-api"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "pretty_assertions",
@@ -5235,7 +5235,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-bigquery"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -5256,7 +5256,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-cassandra"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5272,7 +5272,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-clickhouse"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "relix-core",
@@ -5287,7 +5287,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-duckdb"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "duckdb",
@@ -5300,7 +5300,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-dynamodb"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "aws-config",
@@ -5318,7 +5318,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-http"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "relix-core",
  "relix-driver-api",
@@ -5331,7 +5331,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-influxdb"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "pretty_assertions",
@@ -5346,7 +5346,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-manager"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -5372,7 +5372,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-mongodb"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "futures-util",
@@ -5389,7 +5389,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-mssql"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5406,7 +5406,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-mysql"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "mysql_async",
@@ -5420,7 +5420,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-neo4j"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5437,7 +5437,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-oracle"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "oracle",
@@ -5450,7 +5450,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-postgres"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "futures-util",
@@ -5466,7 +5466,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-redis"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "pretty_assertions",
@@ -5480,7 +5480,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-search"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -5498,7 +5498,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-snowflake"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -5521,7 +5521,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-sqlite"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "relix-core",
@@ -5534,7 +5534,7 @@ dependencies = [
 
 [[package]]
 name = "relix-driver-trino"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -5550,7 +5550,7 @@ dependencies = [
 
 [[package]]
 name = "relix-editor"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "pretty_assertions",
  "relix-core",
@@ -5559,7 +5559,7 @@ dependencies = [
 
 [[package]]
 name = "relix-project"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "apple-native-keyring-store",
  "chrono",
@@ -5579,7 +5579,7 @@ dependencies = [
 
 [[package]]
 name = "relix-query"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "chrono",
  "pretty_assertions",
@@ -5594,7 +5594,7 @@ dependencies = [
 
 [[package]]
 name = "relix-safety"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "pretty_assertions",
  "relix-core",
@@ -5604,7 +5604,7 @@ dependencies = [
 
 [[package]]
 name = "relix-ssh"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "rand 0.10.3",
  "relix-core",
@@ -5619,7 +5619,7 @@ dependencies = [
 
 [[package]]
 name = "relix-testing"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "rand 0.10.3",
@@ -5632,7 +5632,7 @@ dependencies = [
 
 [[package]]
 name = "relix-tls"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "relix-core",
  "relix-driver-api",
@@ -5644,7 +5644,7 @@ dependencies = [
 
 [[package]]
 name = "relix-tls-relay"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "rcgen",
  "relix-core",
@@ -5657,7 +5657,7 @@ dependencies = [
 
 [[package]]
 name = "relix-tui"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "crossterm 0.29.0",
  "futures-util",
@@ -5677,7 +5677,7 @@ dependencies = [
 
 [[package]]
 name = "relix-vpn"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "async-trait",
  "if-addrs",
