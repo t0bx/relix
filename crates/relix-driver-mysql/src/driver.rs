@@ -67,6 +67,7 @@ fn driver_capabilities(flavor: Flavor) -> DriverCapabilities {
         table_editing: true,
         routines: flavor.supports_routines(),
         tls: true,
+        read_only_sessions: flavor.supports_read_only_sessions(),
         ..DriverCapabilities::relational()
     }
 }
@@ -101,5 +102,6 @@ mod tests {
         assert!(capabilities.cancellation && capabilities.routines && capabilities.tls);
         let tidb = TiDbDriver::new().capabilities();
         assert!(tidb.cancellation && tidb.tls && !tidb.routines);
+        assert!(capabilities.read_only_sessions && !tidb.read_only_sessions);
     }
 }

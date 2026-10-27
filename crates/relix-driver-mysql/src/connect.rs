@@ -19,6 +19,7 @@ use tokio::sync::Mutex;
 const SESSION_IDENTITY_SQL: &str = "SELECT VERSION(), CONNECTION_ID()";
 const POOL_MIN_CONNECTIONS: usize = 1;
 const POOL_MAX_CONNECTIONS: usize = 4;
+const READ_ONLY_SESSION_SQL: &str = "SET SESSION TRANSACTION READ ONLY";
 
 pub async fn connect(
     flavor: Flavor,
@@ -86,6 +87,10 @@ fn base_options(flavor: Flavor, config: &ConnectionConfig) -> OptsBuilder {
         .map_or(pool_opts.clone(), |constraints| {
             pool_opts.with_constraints(constraints)
         });
+    let setup: Vec<&str> = (config.read_only && flavor.supports_read_only_sessions())
+        .then_some(READ_ONLY_SESSION_SQL)
+        .into_iter()
+        .collect();
     OptsBuilder::default()
         .ip_or_hostname(config.host_or_default())
         .tcp_port(settings.port.unwrap_or(flavor.default_port()))
@@ -100,6 +105,7 @@ fn base_options(flavor: Flavor, config: &ConnectionConfig) -> OptsBuilder {
         .client_found_rows(true)
         .prefer_socket(false)
         .pool_opts(pool_opts)
+        .setup(setup)
 }
 
 fn configured_database(config: &ConnectionConfig) -> Option<String> {
@@ -138,6 +144,18 @@ mod tests {
         assert!(opts.client_found_rows());
         assert!(!opts.prefer_socket());
         assert_eq!(opts.pool_opts().constraints().max(), POOL_MAX_CONNECTIONS);
+    }
+
+    #[test]
+    fn read_only_configs_set_up_read_only_sessions() {
+        let config = ConnectionConfig::new(ConnectionSettings::default(), None);
+        let writable: Opts = base_options(Flavor::MySql, &config).into();
+        assert!(writable.setup().is_empty());
+        let read_only = config.with_read_only(true);
+        let mysql: Opts = base_options(Flavor::MySql, &read_only).into();
+        assert_eq!(mysql.setup(), [READ_ONLY_SESSION_SQL]);
+        let tidb: Opts = base_options(Flavor::TiDb, &read_only).into();
+        assert!(tidb.setup().is_empty());
     }
 
     #[test]

@@ -44,6 +44,11 @@ impl Flavor {
         self != Self::TiDb
     }
 
+    /// TiDB rejects `SET TRANSACTION READ ONLY` unless noop functions are enabled.
+    pub fn supports_read_only_sessions(self) -> bool {
+        self != Self::TiDb
+    }
+
     pub fn detect(version: &str) -> Self {
         let lowercase = version.to_ascii_lowercase();
         if lowercase.contains("tidb") {

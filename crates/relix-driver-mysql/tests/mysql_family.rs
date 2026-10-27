@@ -50,6 +50,7 @@ for_each_engine!(
     applies_changes_in_one_transaction,
     rolls_back_conflicting_changes,
     cancels_running_statement,
+    read_only_sessions_reject_writes,
 );
 
 struct Fixture {
@@ -610,4 +611,46 @@ async fn mismatched_driver_reports_actual_server() {
         assert_eq!(connection.server_info().product, expected);
         connection.close().await.unwrap();
     }
+}
+
+async fn read_only_sessions_reject_writes(engine: Engine) {
+    let Some(fixture) = Fixture::open(engine).await else {
+        return;
+    };
+    let name = fixture.create_items().await;
+    let driver = engine.driver();
+    let config = engine.config().unwrap().with_read_only(true);
+    let reader = driver.connect(&config).await.unwrap();
+    let sql = reader.as_sql().unwrap();
+    let rows = sql
+        .execute(
+            &format!("SELECT COUNT(*) FROM `{name}`"),
+            &ExecuteOptions::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rows_of(rows).rows, vec![vec![Value::Int(5)]]);
+    if driver.capabilities().read_only_sessions {
+        let error = sql
+            .execute(
+                &format!("DELETE FROM `{name}` WHERE id = 1"),
+                &ExecuteOptions::default(),
+            )
+            .await
+            .unwrap_err();
+        assert!(error.message.contains("READ ONLY"), "{error}");
+        let changes = ChangeSet {
+            table: fixture.table(&name),
+            changes: vec![RowChange::Delete {
+                key: vec![("id".into(), Value::Int(1))],
+            }],
+        };
+        assert!(
+            sql.apply_changes(&changes).await.is_err(),
+            "pooled data connections are read-only as well"
+        );
+        assert_eq!(fixture.rows(&name).await.len(), 5);
+    }
+    reader.close().await.unwrap();
+    fixture.run(&format!("DROP TABLE `{name}`")).await;
 }
