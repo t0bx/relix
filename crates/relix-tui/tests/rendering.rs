@@ -8,7 +8,7 @@ use ratatui::backend::TestBackend;
 use relix_app::Focus;
 use relix_app::test_support::AppHarness;
 use relix_config::{KeyChord, KeyCode};
-use relix_core::{DataSourceDefinition, DriverId, Environment};
+use relix_core::{DataSourceDefinition, DriverId, Environment, ExecutionPolicy};
 use relix_testing::mock_key_value::{MockKeyValueDriver, MockValue};
 use relix_tui::colors::ColorDepth;
 use relix_tui::ui::{UiState, draw};
@@ -59,14 +59,26 @@ async fn main_layout_shows_header_explorer_panes_and_status() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn header_shows_the_execution_policy_of_protected_sources() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = harness(&dir);
+    harness.add_sqlite("Stage", &dir.path().join("stage.db"), Environment::Staging);
+    let screen = render(&mut harness, 120, 32);
+    println!("{screen}");
+    assert!(screen.contains("staging"));
+    assert!(screen.contains("confirm writes"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn editor_results_grid_and_json_view_render() {
     let dir = tempfile::tempdir().unwrap();
     let mut harness = harness(&dir);
-    let source = harness.add_sqlite(
-        "Local",
-        &dir.path().join("local.db"),
-        Environment::Production,
-    );
+    let mut definition = DataSourceDefinition::new("Local", DriverId::from("sqlite"));
+    definition.settings.file_path = Some(dir.path().join("local.db"));
+    definition.settings.create_if_missing = true;
+    definition.environment = Environment::Production;
+    definition.execution_policy = Some(ExecutionPolicy::Unrestricted);
+    let source = harness.add_data_source(definition);
     harness
         .run_sql(source, "CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, status TEXT);\nINSERT INTO users (username, status) VALUES ('admin', 'active'), ('user1', NULL);\nSELECT * FROM users;")
         .await;

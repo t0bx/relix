@@ -13,6 +13,7 @@ use ratatui::widgets::Paragraph;
 use relix_app::App;
 use relix_app::app::ConnectionStatus;
 use relix_app::tab::Tab;
+use relix_core::ExecutionPolicy;
 
 pub fn draw(frame: &mut Frame<'_>, area: Rect, app: &App, ui: &UiState) {
     let styles = &ui.styles;
@@ -47,6 +48,19 @@ pub fn draw(frame: &mut Frame<'_>, area: Rect, app: &App, ui: &UiState) {
             spans.push(Span::raw(" "));
             spans.push(Span::styled(
                 format!(" {} ", definition.environment.label()),
+                bold(Style::default().fg(styles.background).bg(color)),
+            ));
+        }
+        let policy = definition.effective_execution_policy();
+        if policy != ExecutionPolicy::Unrestricted {
+            let color = if policy.is_read_only() {
+                styles.success
+            } else {
+                styles.warning
+            };
+            spans.push(Span::raw(" "));
+            spans.push(Span::styled(
+                format!(" {} ", policy.label()),
                 bold(Style::default().fg(styles.background).bg(color)),
             ));
         }
