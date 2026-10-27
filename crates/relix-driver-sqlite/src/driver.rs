@@ -42,6 +42,7 @@ impl DatabaseDriver for SqliteDriver {
             table_editing: true,
             routines: false,
             tls: false,
+            read_only_sessions: true,
             ..DriverCapabilities::relational()
         }
     }
@@ -51,9 +52,13 @@ impl DatabaseDriver for SqliteDriver {
         config: &ConnectionConfig,
     ) -> Result<Box<dyn DatabaseConnection>, DriverError> {
         let settings = config.settings.clone();
+        let read_only = config.read_only;
         let timeout = settings.connect_timeout();
-        let connection =
-            with_timeout(timeout, run_blocking(move || open_database(&settings))).await?;
+        let connection = with_timeout(
+            timeout,
+            run_blocking(move || open_database(&settings, read_only)),
+        )
+        .await?;
         Ok(Box::new(SqliteConnection::new(connection)))
     }
 }
